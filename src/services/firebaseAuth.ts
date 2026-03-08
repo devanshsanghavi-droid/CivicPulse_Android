@@ -212,15 +212,23 @@ export const signInWithEmail = async (email: string, password: string): Promise<
  * Sign out from Firebase and Google
  */
 export const signOutUser = async (): Promise<void> => {
+  // Revoke Google access token (best-effort — token may already be expired or
+  // the user may have signed in via email, so ignore failures here)
   try {
     await GoogleSignin.revokeAccess();
-    await GoogleSignin.signOut();
-    await signOut(auth);
-    await storageService.clearCurrentUser();
-  } catch (error: any) {
-    console.error("Sign-out error:", error);
-    throw new Error(error.message || "Failed to sign out");
+  } catch {
+    // token_not_revocable / no active Google session — safe to ignore
   }
+
+  // These must succeed for the user to actually be signed out
+  try {
+    await GoogleSignin.signOut();
+  } catch {
+    // No active Google session — safe to ignore
+  }
+
+  await signOut(auth);
+  await storageService.clearCurrentUser();
 };
 
 /**
