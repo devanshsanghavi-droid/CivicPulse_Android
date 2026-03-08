@@ -7,6 +7,9 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithCredential,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
   User as FirebaseUser
 } from "firebase/auth";
 import {
@@ -115,6 +118,93 @@ export const signInWithGoogle = async (): Promise<User> => {
     }
     console.error("Google Sign-In error:", error);
     throw new Error(error.message || "Failed to sign in with Google");
+  }
+};
+
+/**
+ * Sign up with email and password
+ */
+export const signUpWithEmail = async (email: string, password: string, displayName: string): Promise<User> => {
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    const firebaseUser = result.user;
+
+    // Set display name
+    await updateProfile(firebaseUser, { displayName });
+
+    const now = new Date().toISOString();
+    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+    const role = isSuperAdmin ? 'super_admin' : 'resident';
+
+    const user = await storageService.upsertUser({
+      id: firebaseUser.uid,
+      name: displayName,
+      email,
+      role,
+      photoURL: '',
+      createdAt: now,
+      lastLoginAt: now,
+      notifsEnabled: true,
+    });
+
+    try {
+      await firestoreService.logLogin({ userId: user.id, email, name: displayName, photoURL: '', loginAt: now, userAgent: 'CivicPulse iOS App' });
+    } catch (e) { console.warn('Failed to log login event:', e); }
+
+    try {
+      await firestoreService.upsertUserRecord({ id: user.id, email, name: displayName, photoURL: '', role: user.role, banType: 'none', createdAt: now, lastLoginAt: now });
+    } catch (e) { console.warn('Failed to upsert user record:', e); }
+
+    return user;
+  } catch (error: any) {
+    if (error.code === 'auth/email-already-in-use') throw new Error('An account with this email already exists.');
+    if (error.code === 'auth/weak-password') throw new Error('Password must be at least 6 characters.');
+    if (error.code === 'auth/invalid-email') throw new Error('Please enter a valid email address.');
+    throw new Error(error.message || 'Failed to create account');
+  }
+};
+
+/**
+ * Sign in with email and password
+ */
+export const signInWithEmail = async (email: string, password: string): Promise<User> => {
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    const firebaseUser = result.user;
+
+    const name = firebaseUser.displayName || email.split('@')[0] || 'User';
+    const photoURL = firebaseUser.photoURL || '';
+    const now = new Date().toISOString();
+    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+    const role = isSuperAdmin ? 'super_admin' : 'resident';
+
+    const user = await storageService.upsertUser({
+      id: firebaseUser.uid,
+      name,
+      email,
+      role,
+      photoURL,
+      createdAt: now,
+      lastLoginAt: now,
+      notifsEnabled: true,
+    });
+
+    try {
+      await firestoreService.logLogin({ userId: user.id, email, name, photoURL, loginAt: now, userAgent: 'CivicPulse iOS App' });
+    } catch (e) { console.warn('Failed to log login event:', e); }
+
+    try {
+      await firestoreService.upsertUserRecord({ id: user.id, email, name, photoURL, role: user.role, banType: 'none', createdAt: now, lastLoginAt: now });
+    } catch (e) { console.warn('Failed to upsert user record:', e); }
+
+    return user;
+  } catch (error: any) {
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      throw new Error('Incorrect email or password.');
+    }
+    if (error.code === 'auth/invalid-email') throw new Error('Please enter a valid email address.');
+    if (error.code === 'auth/too-many-requests') throw new Error('Too many attempts. Please try again later.');
+    throw new Error(error.message || 'Failed to sign in');
   }
 };
 
