@@ -102,7 +102,7 @@ export default function LoginScreen() {
                 Civic<Text style={styles.appPulse}>Pulse</Text>
               </Text>
               <Text style={styles.citySub}>
-                Los Altos Community Platform
+                Community Platform
               </Text>
             </View>
 

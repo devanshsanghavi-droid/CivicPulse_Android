@@ -24,7 +24,7 @@ type Nav = CompositeNavigationProp<
 >;
 type RouteType = RouteProp<RootStackParamList, 'Main'>;
 
-// Los Altos default center
+// Default map center
 const DEFAULT_REGION: Region = {
   latitude: 37.3852,
   longitude: -122.1141,

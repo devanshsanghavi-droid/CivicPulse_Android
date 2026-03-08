@@ -16,7 +16,7 @@ export const CATEGORIES: Category[] = [
 ];
 
 export const APP_NAME = 'CivicPulse';
-export const CITY_NAME = 'Los Altos';
+export const CITY_NAME = 'Community';
 
 export const TRENDING_WEIGHT_UPVOTES = 2;
 export const TRENDING_RECENCY_DAYS = 7;
