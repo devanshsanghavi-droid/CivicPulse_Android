@@ -3,10 +3,11 @@
 // with React Navigation's stack + bottom tab navigator.
 
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, StackNavigationProp } from '@react-navigation/stack';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useApp } from '../context/AppContext';
@@ -41,6 +42,23 @@ export type MainTabParamList = {
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
+
+// Guest pill button rendered in place of the Report tab for unauthenticated users
+function GuestLoginTabButton() {
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  return (
+    <View style={guestButtonStyles.wrapper}>
+      <TouchableOpacity
+        style={guestButtonStyles.pill}
+        onPress={() => navigation.navigate('Login')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="lock-closed" size={13} color="#ffffff" />
+        <Text style={guestButtonStyles.label}>Log In</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 // Bottom Tab Navigator (shown after login)
 function MainTabs() {
@@ -84,7 +102,7 @@ function MainTabs() {
         component={ReportScreen}
         options={{
           title: 'Report',
-          tabBarButton: user ? undefined : () => null,
+          tabBarButton: user ? undefined : (_props) => <GuestLoginTabButton />,
         }}
       />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
@@ -152,6 +170,34 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+
+const guestButtonStyles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#2563eb',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    shadowColor: '#2563eb',
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  label: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+});
 
 const styles = StyleSheet.create({
   loadingContainer: {
