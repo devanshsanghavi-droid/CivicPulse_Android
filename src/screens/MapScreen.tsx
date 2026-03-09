@@ -17,6 +17,8 @@ import { CATEGORIES } from '../constants';
 import { useApp } from '../context/AppContext';
 import { RootStackParamList, MainTabParamList } from '../navigation/AppNavigator';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
+import GuestBanner from '../components/GuestBanner';
+import AuthPromptToast, { AuthPromptToastRef } from '../components/AuthPromptToast';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -36,6 +38,7 @@ export default function MapScreen() {
   const { user, locationExplained, setLocationExplained, isDark, theme } = useApp();
   const navigation = useNavigation<Nav>();
   const mapRef = useRef<MapView>(null);
+  const toastRef = useRef<AuthPromptToastRef>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
@@ -86,13 +89,13 @@ export default function MapScreen() {
         showsMyLocationButton={false}
         userInterfaceStyle={isDark ? 'dark' : 'light'}
       >
-        {issues.map(issue => {
+        {issues.filter(issue => issue.latitude != null && issue.longitude != null).map(issue => {
           const color = theme[issue.status as 'open' | 'acknowledged' | 'resolved'] || theme.open;
           const category = CATEGORIES.find(c => c.id === issue.categoryId);
           return (
             <Marker
               key={issue.id}
-              coordinate={{ latitude: issue.latitude, longitude: issue.longitude }}
+              coordinate={{ latitude: issue.latitude!, longitude: issue.longitude! }}
               pinColor={color}
             >
               <Callout
@@ -143,16 +146,25 @@ export default function MapScreen() {
         <Ionicons name="locate" size={22} color={theme.primary} />
       </TouchableOpacity>
 
-      {/* Report FAB */}
-      {user && (
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: theme.primary, ...SHADOWS.colored(theme.primary) }]}
-          onPress={() => navigation.navigate('Main', { screen: 'Report' })}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="add" size={28} color="#ffffff" />
-        </TouchableOpacity>
-      )}
+      {/* Report FAB — always visible; guests get an auth prompt toast */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: theme.primary, ...SHADOWS.colored(theme.primary) }]}
+        onPress={() => {
+          if (!user) {
+            toastRef.current?.show('Sign in to report a problem');
+          } else {
+            navigation.navigate('Main', { screen: 'Report' });
+          }
+        }}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={28} color="#ffffff" />
+      </TouchableOpacity>
+
+      {/* Guest banner — floats above the map */}
+      {!user && <GuestBanner style={styles.guestBanner} />}
+
+      <AuthPromptToast ref={toastRef} />
     </View>
   );
 }
@@ -196,6 +208,14 @@ const styles = StyleSheet.create({
     width: 58, height: 58, borderRadius: 29,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: '#ffffff',
+  },
+
+  guestBanner: {
+    position: 'absolute',
+    top: 72,
+    left: 0,
+    right: 0,
+    marginHorizontal: 0,
   },
 
   callout: { width: 240 },

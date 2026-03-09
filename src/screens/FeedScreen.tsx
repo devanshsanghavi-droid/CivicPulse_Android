@@ -14,6 +14,7 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { useApp } from '../context/AppContext';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
 import { AppTheme } from '../constants/theme';
+import GuestBanner from '../components/GuestBanner';
 
 type Nav = StackNavigationProp<RootStackParamList>;
 
@@ -87,7 +88,7 @@ const IssueCard = ({ issue, onPress, theme, isDark }: { issue: Issue; onPress: (
 
 export default function FeedScreen() {
   const navigation = useNavigation<Nav>();
-  const { isDark, theme } = useApp();
+  const { user, isDark, theme } = useApp();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [sort, setSort] = useState('trending');
   const [filterCat, setFilterCat] = useState<string | undefined>();
@@ -121,6 +122,7 @@ export default function FeedScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
+      {!user && <GuestBanner />}
       <KeyboardAvoidingView behavior="padding" style={styles.container}>
         {/* Search */}
         <View style={[styles.searchRow, { backgroundColor: theme.card, borderColor: theme.border }]}>

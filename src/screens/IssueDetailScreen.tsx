@@ -1,5 +1,5 @@
 // src/screens/IssueDetailScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Image,
   TouchableOpacity, TextInput, ActivityIndicator,
@@ -16,6 +16,7 @@ import { CATEGORIES } from '../constants';
 import { useApp } from '../context/AppContext';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
+import AuthPromptToast, { AuthPromptToastRef } from '../components/AuthPromptToast';
 
 type RouteType = RouteProp<RootStackParamList, 'IssueDetail'>;
 
@@ -46,25 +47,37 @@ export default function IssueDetailScreen() {
   const [commenting, setCommenting] = useState(false);
   const [upvoting, setUpvoting] = useState(false);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const toastRef = useRef<AuthPromptToastRef>(null);
 
-  useEffect(() => { loadData(); }, [issueId]);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [issueData, commentsData] = await Promise.all([
-        firestoreService.getIssue(issueId),
-        firestoreService.getComments(issueId),
-      ]);
-      setIssue(issueData);
-      setComments(commentsData);
-      if (user) setHasUpvoted(await storageService.hasUpvoted(issueId, user.id));
-    } catch (err) { console.error('IssueDetail load error:', err); }
-    finally { setLoading(false); }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const [issueData, commentsData] = await Promise.all([
+          firestoreService.getIssue(issueId),
+          firestoreService.getComments(issueId),
+        ]);
+        if (cancelled) return;
+        setIssue(issueData);
+        setComments(commentsData);
+        if (user) {
+          const upvoted = await storageService.hasUpvoted(issueId, user.id);
+          if (!cancelled) setHasUpvoted(upvoted);
+        }
+      } catch (err) { console.error('IssueDetail load error:', err); }
+      finally { if (!cancelled) setLoading(false); }
+    };
+    loadData();
+    return () => { cancelled = true; };
+  }, [issueId]);
 
   const handleUpvote = async () => {
-    if (!user || !issue || upvoting) return;
+    if (!user) {
+      toastRef.current?.show('Sign in to upvote this report');
+      return;
+    }
+    if (!issue || upvoting) return;
     setUpvoting(true);
     try {
       const result = await storageService.toggleUpvote(issueId, user.id);
@@ -184,7 +197,7 @@ export default function IssueDetailScreen() {
 
             <TouchableOpacity
               style={[styles.upvoteBtn, { borderColor: theme.primary }, hasUpvoted && { backgroundColor: theme.primary }]}
-              onPress={handleUpvote} disabled={!user || upvoting} activeOpacity={0.8}>
+              onPress={handleUpvote} disabled={upvoting} activeOpacity={0.8}>
               {upvoting ? (
                 <ActivityIndicator size="small" color={hasUpvoted ? '#ffffff' : theme.primary} />
               ) : (
@@ -222,7 +235,7 @@ export default function IssueDetailScreen() {
           </View>
         </ScrollView>
 
-        {user && (
+        {user ? (
           <View style={[styles.commentFooter, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
             <View style={styles.commentInputRow}>
               <TextInput
@@ -242,7 +255,18 @@ export default function IssueDetailScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.guestCommentCta, { backgroundColor: theme.card, borderTopColor: theme.border }]}
+            onPress={() => toastRef.current?.show('Sign in to add a comment')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="lock-closed-outline" size={16} color={theme.textMuted} />
+            <Text style={[styles.guestCommentCtaText, { color: theme.textMuted }]}>Sign in to join the discussion</Text>
+            <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+          </TouchableOpacity>
         )}
+        <AuthPromptToast ref={toastRef} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -308,4 +332,20 @@ const styles = StyleSheet.create({
   commentAuthor: { ...TYPOGRAPHY.caption, fontWeight: '800', flex: 1 },
   commentDate: { ...TYPOGRAPHY.microLabel, fontWeight: '600' },
   commentBody: { ...TYPOGRAPHY.body, lineHeight: 21 },
+
+  guestCommentCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    borderTopWidth: 1,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+  },
+  guestCommentCtaText: {
+    ...TYPOGRAPHY.body,
+    flex: 1,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
 });

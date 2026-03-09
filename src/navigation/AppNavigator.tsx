@@ -109,44 +109,45 @@ function LoadingScreen() {
   );
 }
 
+function useIssueDetailOptions() {
+  const { theme } = useApp();
+  return {
+    headerShown: true,
+    headerTitle: 'Issue Report',
+    headerBackTitle: 'Back',
+    headerTintColor: theme.primary,
+    headerStyle: { backgroundColor: theme.background },
+    headerTitleStyle: { fontWeight: '800' as const, fontSize: 16, color: theme.textPrimary },
+  };
+}
+
 // Root Navigator
 export default function AppNavigator() {
   const { user, isAuthLoading } = useApp();
+  const issueDetailOptions = useIssueDetailOptions();
 
   if (isAuthLoading) return <LoadingScreen />;
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
-          // Auth stack (not logged in)
-          <>
-            <Stack.Screen name="Landing" component={LandingScreen} />
-            <Stack.Screen name="Login" component={LoginScreen} />
-          </>
-        ) : (
-          // App stack (logged in)
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen
-              name="IssueDetail"
-              component={IssueDetailScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'Issue Report',
-                headerBackTitle: 'Back',
-                headerTintColor: '#2563eb',
-                headerStyle: { backgroundColor: '#ffffff' },
-                headerTitleStyle: { fontWeight: '800', fontSize: 16 }
-              }}
-            />
-            <Stack.Screen
-              name="LocationExplanation"
-              component={LocationExplanationScreen}
-              options={{ presentation: 'modal' }}
-            />
-          </>
-        )}
+      <Stack.Navigator
+        key={user ? 'authed' : 'guest'}
+        initialRouteName={user ? 'Main' : 'Landing'}
+        screenOptions={{ headerShown: false }}
+      >
+        <Stack.Screen name="Landing" component={LandingScreen} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen
+          name="IssueDetail"
+          component={IssueDetailScreen}
+          options={issueDetailOptions}
+        />
+        <Stack.Screen
+          name="LocationExplanation"
+          component={LocationExplanationScreen}
+          options={{ presentation: 'modal' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
