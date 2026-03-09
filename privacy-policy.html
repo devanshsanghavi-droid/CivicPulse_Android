@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — CivicPulse</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #2563eb;
+      --blue-light: #eff6ff;
+      --blue-mid: #dbeafe;
+      --navy: #0f172a;
+      --slate: #334155;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --white: #ffffff;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #f8fafc;
+      color: var(--slate);
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    header {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .logo {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.4rem;
+      color: var(--navy);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .logo span { color: var(--blue); }
+
+    .badge {
+      background: var(--blue-light);
+      color: var(--blue);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* Hero */
+    .hero {
+      background: linear-gradient(135deg, var(--navy) 0%, #1e3a5f 100%);
+      padding: 64px 2rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(37,99,235,0.2) 0%, transparent 70%);
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .hero h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2rem, 5vw, 3rem);
+      color: var(--white);
+      letter-spacing: -0.03em;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .hero p {
+      color: rgba(255,255,255,0.6);
+      font-size: 0.95rem;
+      position: relative;
+    }
+
+    /* Main */
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 56px 2rem 80px;
+    }
+
+    .intro-card {
+      background: var(--blue-light);
+      border: 1px solid var(--blue-mid);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 48px;
+      font-size: 0.95rem;
+      color: #1e40af;
+      line-height: 1.65;
+    }
+
+    .intro-card strong { font-weight: 600; }
+
+    /* Sections */
+    section {
+      margin-bottom: 44px;
+      padding-bottom: 44px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    section:last-of-type {
+      border-bottom: none;
+    }
+
+    .section-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--blue);
+      color: white;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.4rem;
+      color: var(--navy);
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      font-size: 0.95rem;
+      color: var(--slate);
+      margin-bottom: 12px;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    ul {
+      list-style: none;
+      margin: 12px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    ul li {
+      font-size: 0.95rem;
+      color: var(--slate);
+      padding-left: 20px;
+      position: relative;
+    }
+
+    ul li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      color: var(--blue);
+      font-size: 0.85rem;
+    }
+
+    /* Data table */
+    .data-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 16px 0;
+      font-size: 0.875rem;
+    }
+
+    .data-grid-header {
+      background: var(--navy);
+      color: rgba(255,255,255,0.8);
+      padding: 10px 14px;
+      font-weight: 500;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .data-grid-cell {
+      background: var(--white);
+      padding: 10px 14px;
+      color: var(--slate);
+    }
+
+    .data-grid-cell.purpose {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    /* Contact card */
+    .contact-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .contact-icon {
+      width: 44px;
+      height: 44px;
+      background: var(--blue-light);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .contact-card h3 {
+      font-weight: 600;
+      color: var(--navy);
+      font-size: 0.95rem;
+      margin-bottom: 4px;
+    }
+
+    .contact-card a {
+      color: var(--blue);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .contact-card a:hover { text-decoration: underline; }
+
+    /* Footer */
+    footer {
+      background: var(--navy);
+      color: rgba(255,255,255,0.4);
+      text-align: center;
+      padding: 28px 2rem;
+      font-size: 0.85rem;
+    }
+
+    footer span { color: rgba(255,255,255,0.7); }
+
+    @media (max-width: 600px) {
+      .data-grid { grid-template-columns: 1fr; }
+      .data-grid-header:not(:first-child) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <a class="logo" href="#">Civic<span>Pulse</span></a>
+      <span class="badge">Privacy Policy</span>
+    </div>
+  </header>
+
+  <div class="hero">
+    <h1>Privacy Policy</h1>
+    <p>Last updated: March 2025 &nbsp;·&nbsp; Los Altos, California</p>
+  </div>
+
+  <main>
+
+    <div class="intro-card">
+      <strong>Summary:</strong> CivicPulse collects only the information needed to operate a civic reporting platform for Los Altos residents. We do not sell your data, share it with advertisers, or use it for tracking. All data is stored securely in Firebase and used solely to provide the app's features.
+    </div>
+
+    <section>
+      <div class="section-number">1</div>
+      <h2>Who We Are</h2>
+      <p>CivicPulse ("we," "us," or "our") is a civic reporting application designed for Los Altos, California residents. The app allows community members to report local infrastructure issues such as potholes, broken streetlights, and graffiti, and to track their resolution.</p>
+      <p>This Privacy Policy explains what information we collect, how we use it, and your rights regarding your data.</p>
+    </section>
+
+    <section>
+      <div class="section-number">2</div>
+      <h2>Information We Collect</h2>
+      <p>We collect information in three ways: information you provide directly, information collected automatically, and information from third-party services.</p>
+
+      <div class="data-grid">
+        <div class="data-grid-header">Data Type</div>
+        <div class="data-grid-header">How Collected</div>
+        <div class="data-grid-header">Purpose</div>
+
+        <div class="data-grid-cell">Name &amp; Email</div>
+        <div class="data-grid-cell">Google Sign-In</div>
+        <div class="data-grid-cell purpose">Account creation &amp; identification</div>
+
+        <div class="data-grid-cell">Profile Photo</div>
+        <div class="data-grid-cell">Google Sign-In</div>
+        <div class="data-grid-cell purpose">Displayed on your profile</div>
+
+        <div class="data-grid-cell">Location</div>
+        <div class="data-grid-cell">Device GPS (with permission)</div>
+        <div class="data-grid-cell purpose">Pin issue location on map</div>
+
+        <div class="data-grid-cell">Photos</div>
+        <div class="data-grid-cell">Camera / Photo library</div>
+        <div class="data-grid-cell purpose">Attach to issue reports</div>
+
+        <div class="data-grid-cell">Issue Reports</div>
+        <div class="data-grid-cell">You submit them</div>
+        <div class="data-grid-cell purpose">Core app functionality</div>
+
+        <div class="data-grid-cell">Comments &amp; Upvotes</div>
+        <div class="data-grid-cell">In-app activity</div>
+        <div class="data-grid-cell purpose">Community engagement</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-number">3</div>
+      <h2>How We Use Your Information</h2>
+      <p>We use your information exclusively to provide and improve the CivicPulse service:</p>
+      <ul>
+        <li>To create and manage your account</li>
+        <li>To display your issue reports on the community feed and map</li>
+        <li>To send notifications about your report status changes</li>
+        <li>To enable community features such as upvoting and commenting</li>
+        <li>To allow administrators to manage and resolve reported issues</li>
+        <li>To improve the app based on usage patterns</li>
+      </ul>
+      <p>We do <strong>not</strong> use your information for advertising, sell it to third parties, or share it with data brokers.</p>
+    </section>
+
+    <section>
+      <div class="section-number">4</div>
+      <h2>Data Storage &amp; Security</h2>
+      <p>All data is stored in Google Firebase, which provides enterprise-grade security including encryption at rest and in transit. Firebase complies with SOC 1, SOC 2, SOC 3, ISO 27001, and other security standards.</p>
+      <p>Access to your data is restricted to authenticated users. Only you can edit or delete your own reports. Admin users (designated by CivicPulse) can manage issue statuses but cannot access your private account information beyond what is publicly visible in the app.</p>
+    </section>
+
+    <section>
+      <div class="section-number">5</div>
+      <h2>Third-Party Services</h2>
+      <p>CivicPulse uses the following third-party services:</p>
+      <ul>
+        <li><strong>Google Firebase</strong> — authentication, database, and file storage</li>
+        <li><strong>Google Maps</strong> — map display and location services</li>
+        <li><strong>Google Sign-In</strong> — account authentication</li>
+      </ul>
+      <p>Each of these services has their own privacy policies. We encourage you to review Google's Privacy Policy at <a href="https://policies.google.com/privacy" style="color:#2563eb;">policies.google.com/privacy</a>.</p>
+    </section>
+
+    <section>
+      <div class="section-number">6</div>
+      <h2>Data Retention</h2>
+      <p>We retain your account information and submitted reports for as long as your account is active. Issue reports may remain visible after account deletion as they are part of the community record. You may request deletion of your personal data at any time by contacting us.</p>
+    </section>
+
+    <section>
+      <div class="section-number">7</div>
+      <h2>Children's Privacy</h2>
+      <p>CivicPulse is not directed at children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us and we will delete it promptly.</p>
+    </section>
+
+    <section>
+      <div class="section-number">8</div>
+      <h2>Your Rights</h2>
+      <p>Depending on your location, you may have the following rights regarding your personal data:</p>
+      <ul>
+        <li>Access the personal data we hold about you</li>
+        <li>Request correction of inaccurate data</li>
+        <li>Request deletion of your account and associated data</li>
+        <li>Export your data in a portable format</li>
+        <li>Opt out of any non-essential data collection</li>
+      </ul>
+      <p>To exercise any of these rights, contact us at the address below.</p>
+    </section>
+
+    <section>
+      <div class="section-number">9</div>
+      <h2>Changes to This Policy</h2>
+      <p>We may update this Privacy Policy from time to time. When we do, we will update the "Last updated" date at the top of this page. Continued use of the app after changes constitutes acceptance of the updated policy.</p>
+    </section>
+
+    <section>
+      <div class="section-number">10</div>
+      <h2>Contact Us</h2>
+      <p>If you have questions about this Privacy Policy or how we handle your data, please reach out:</p>
+      <div class="contact-card">
+        <div class="contact-icon">✉️</div>
+        <div>
+          <h3>CivicPulse Support</h3>
+          <a href="mailto:civicpulsehelpdesk@gmail.com">civicpulsehelpdesk@gmail.com</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>© 2025 <span>CivicPulse</span> · Los Altos, California · All rights reserved</p>
+  </footer>
+
+</body>
+</html>
