@@ -60,9 +60,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   // Listen to Firebase auth state (same as web)
+  // Skip unverified email users — they must verify before being let in.
+  // Google's OAuth flow guarantees emailVerified=true; this guard is for password provider only.
   useEffect(() => {
     const unsubscribe = onAuthStateChange(async (firebaseUser) => {
       if (firebaseUser) {
+        const isEmailProvider = firebaseUser.providerData.some(p => p.providerId === 'password');
+        if (isEmailProvider && !firebaseUser.emailVerified) {
+          // Don't set user or isAuthLoading — the sign-out that follows will
+          // fire another onAuthStateChanged(null) which settles the state.
+          setUserState(null);
+          return;
+        }
         const appUser = await convertFirebaseUserToAppUser(firebaseUser);
         setUserState(appUser);
       } else {

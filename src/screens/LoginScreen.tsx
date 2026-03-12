@@ -68,11 +68,23 @@ export default function LoginScreen() {
 
     setIsLoading(true);
     try {
-      const user = isSignUp
-        ? await signUpWithEmail(email.trim(), password, name.trim())
-        : await signInWithEmail(email.trim(), password);
-      await setUser(user);
-      navigation.navigate('Main');
+      if (isSignUp) {
+        await signUpWithEmail(email.trim(), password, name.trim());
+        Alert.alert(
+          'Verify Your Email',
+          'Please check your email to verify your account before signing in.',
+          [{ text: 'OK' }]
+        );
+        // Switch to sign-in mode so they can log in after verifying
+        setIsSignUp(false);
+        setPassword('');
+        setConfirmPassword('');
+        setName('');
+      } else {
+        const user = await signInWithEmail(email.trim(), password);
+        await setUser(user);
+        navigation.navigate('Main');
+      }
     } catch (err: any) {
       Alert.alert(isSignUp ? 'Sign-Up Failed' : 'Sign-In Failed', err.message || 'Something went wrong.');
     } finally {
@@ -198,6 +210,8 @@ export default function LoginScreen() {
                       value={password}
                       onChangeText={setPassword}
                       secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
                       returnKeyType={isSignUp ? "next" : "done"}
                       onSubmitEditing={isSignUp ? undefined : handleEmailAuth}
                     />
@@ -216,6 +230,8 @@ export default function LoginScreen() {
                         value={confirmPassword}
                         onChangeText={setConfirmPassword}
                         secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        autoCorrect={false}
                         returnKeyType="done"
                         onSubmitEditing={handleEmailAuth}
                       />

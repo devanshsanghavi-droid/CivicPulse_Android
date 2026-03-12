@@ -9,6 +9,7 @@ import {
   signInWithCredential,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendEmailVerification,
   updateProfile,
   User as FirebaseUser
 } from "firebase/auth";
@@ -122,55 +123,52 @@ export const signInWithGoogle = async (): Promise<User> => {
 };
 
 /**
- * Sign up with email and password
+ * Sign up with email and password.
+ * Sends a verification email and signs the user out — they must verify
+ * before they can sign in.
  */
-export const signUpWithEmail = async (email: string, password: string, displayName: string): Promise<User> => {
+export const signUpWithEmail = async (email: string, password: string, displayName: string): Promise<void> => {
+  let firebaseUser: FirebaseUser | null = null;
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
-    const firebaseUser = result.user;
+    firebaseUser = result.user;
 
-    // Set display name
     await updateProfile(firebaseUser, { displayName });
-
-    const now = new Date().toISOString();
-    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
-    const role = isSuperAdmin ? 'super_admin' : 'resident';
-
-    const user = await storageService.upsertUser({
-      id: firebaseUser.uid,
-      name: displayName,
-      email,
-      role,
-      photoURL: '',
-      createdAt: now,
-      lastLoginAt: now,
-      notifsEnabled: true,
-    });
-
-    try {
-      await firestoreService.logLogin({ userId: user.id, email, name: displayName, photoURL: '', loginAt: now, userAgent: 'CivicPulse iOS App' });
-    } catch (e) { console.warn('Failed to log login event:', e); }
-
-    try {
-      await firestoreService.upsertUserRecord({ id: user.id, email, name: displayName, photoURL: '', role: user.role, banType: 'none', createdAt: now, lastLoginAt: now });
-    } catch (e) { console.warn('Failed to upsert user record:', e); }
-
-    return user;
+    await sendEmailVerification(firebaseUser);
+    await signOut(auth);
   } catch (error: any) {
-    if (error.code === 'auth/email-already-in-use') throw new Error('An account with this email already exists.');
-    if (error.code === 'auth/weak-password') throw new Error('Password must be at least 6 characters.');
-    if (error.code === 'auth/invalid-email') throw new Error('Please enter a valid email address.');
-    throw new Error(error.message || 'Failed to create account');
+    // If account was created but verification/sign-out failed, clean up
+    if (firebaseUser) {
+      try { await firebaseUser.delete(); } catch { /* ignore */ }
+      try { await signOut(auth); } catch { /* ignore */ }
+    }
+    switch (error.code) {
+      case 'auth/email-already-in-use': throw new Error('An account with this email already exists.');
+      case 'auth/invalid-email': throw new Error('Please enter a valid email address.');
+      case 'auth/weak-password': throw new Error('Password must be at least 6 characters.');
+      case 'auth/operation-not-allowed': throw new Error('Email/password sign-up is not enabled. Please contact support.');
+      case 'auth/too-many-requests': throw new Error('Too many attempts. Please try again later.');
+      default: throw new Error(error.message || 'Failed to create account. Please try again.');
+    }
   }
 };
 
 /**
- * Sign in with email and password
+ * Sign in with email and password.
+ * Rejects unverified accounts — signs them out and throws.
  */
 export const signInWithEmail = async (email: string, password: string): Promise<User> => {
   try {
     const result = await signInWithEmailAndPassword(auth, email, password);
     const firebaseUser = result.user;
+
+    // Block unverified email accounts
+    if (!firebaseUser.emailVerified) {
+      try { await signOut(auth); } catch { /* AppContext guard is the fallback */ }
+      const err = new Error('Please verify your email before signing in. Check your inbox for a verification link.') as any;
+      err.code = 'auth/email-not-verified';
+      throw err;
+    }
 
     const name = firebaseUser.displayName || email.split('@')[0] || 'User';
     const photoURL = firebaseUser.photoURL || '';
@@ -199,12 +197,17 @@ export const signInWithEmail = async (email: string, password: string): Promise<
 
     return user;
   } catch (error: any) {
-    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-      throw new Error('Incorrect email or password.');
+    switch (error.code) {
+      case 'auth/email-not-verified': throw new Error('Please verify your email before signing in. Check your inbox for a verification link.');
+      case 'auth/user-not-found': throw new Error('No account found with this email.');
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential': throw new Error('Incorrect password. Please try again.');
+      case 'auth/invalid-email': throw new Error('Please enter a valid email address.');
+      case 'auth/too-many-requests': throw new Error('Too many attempts. Please try again later.');
+      case 'auth/user-disabled': throw new Error('This account has been disabled. Please contact support.');
+      case 'auth/operation-not-allowed': throw new Error('Email/password sign-in is not enabled. Please contact support.');
+      default: throw new Error(error.message || 'Something went wrong. Please try again.');
     }
-    if (error.code === 'auth/invalid-email') throw new Error('Please enter a valid email address.');
-    if (error.code === 'auth/too-many-requests') throw new Error('Too many attempts. Please try again later.');
-    throw new Error(error.message || 'Failed to sign in');
   }
 };
 
