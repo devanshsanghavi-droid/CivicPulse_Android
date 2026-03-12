@@ -170,14 +170,16 @@ export const signUpWithEmail = async (email: string, password: string, displayNa
 /**
  * Sign in with email and password.
  * Rejects unverified accounts — signs them out and throws.
+ * Test account auto-creates if it doesn't exist or has wrong password.
  */
 export const signInWithEmail = async (email: string, password: string): Promise<User> => {
+  const isTestAccount = email.toLowerCase() === TEST_ACCOUNT_EMAIL;
+
   try {
     const result = await signInWithEmailAndPassword(auth, email, password);
     const firebaseUser = result.user;
 
     // Block unverified email accounts (test account bypasses)
-    const isTestAccount = email.toLowerCase() === TEST_ACCOUNT_EMAIL;
     if (!firebaseUser.emailVerified && !isTestAccount) {
       try { await signOut(auth); } catch { /* AppContext guard is the fallback */ }
       const err = new Error('Please verify your email before signing in. Check your inbox for a verification link.') as any;
@@ -185,33 +187,17 @@ export const signInWithEmail = async (email: string, password: string): Promise<
       throw err;
     }
 
-    const name = firebaseUser.displayName || email.split('@')[0] || 'User';
-    const photoURL = firebaseUser.photoURL || '';
-    const now = new Date().toISOString();
-    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
-    const role = isSuperAdmin ? 'super_admin' : 'resident';
-
-    const user = await storageService.upsertUser({
-      id: firebaseUser.uid,
-      name,
-      email,
-      role,
-      photoURL,
-      createdAt: now,
-      lastLoginAt: now,
-      notifsEnabled: true,
-    });
-
-    try {
-      await firestoreService.logLogin({ userId: user.id, email, name, photoURL, loginAt: now, userAgent: 'CivicPulse iOS App' });
-    } catch (e) { console.warn('Failed to log login event:', e); }
-
-    try {
-      await firestoreService.upsertUserRecord({ id: user.id, email, name, photoURL, role: user.role, banType: 'none', createdAt: now, lastLoginAt: now });
-    } catch (e) { console.warn('Failed to upsert user record:', e); }
-
-    return user;
+    return await buildUserFromFirebase(firebaseUser, email);
   } catch (error: any) {
+    // Test account: auto-create if not found, or recreate if wrong password
+    if (isTestAccount && (
+      error.code === 'auth/user-not-found' ||
+      error.code === 'auth/wrong-password' ||
+      error.code === 'auth/invalid-credential'
+    )) {
+      return await resetTestAccount(email, password);
+    }
+
     switch (error.code) {
       case 'auth/email-not-verified': throw new Error('Please verify your email before signing in. Check your inbox for a verification link.');
       case 'auth/user-not-found': throw new Error('No account found with this email.');
@@ -223,6 +209,50 @@ export const signInWithEmail = async (email: string, password: string): Promise<
       case 'auth/operation-not-allowed': throw new Error('Email/password sign-in is not enabled. Please contact support.');
       default: throw new Error(error.message || 'Something went wrong. Please try again.');
     }
+  }
+};
+
+/** Shared helper: build app User from a Firebase user after successful auth */
+const buildUserFromFirebase = async (firebaseUser: FirebaseUser, email: string): Promise<User> => {
+  const name = firebaseUser.displayName || email.split('@')[0] || 'User';
+  const photoURL = firebaseUser.photoURL || '';
+  const now = new Date().toISOString();
+  const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+  const role = isSuperAdmin ? 'super_admin' : 'resident';
+
+  const user = await storageService.upsertUser({
+    id: firebaseUser.uid, name, email, role, photoURL,
+    createdAt: now, lastLoginAt: now, notifsEnabled: true,
+  });
+
+  try {
+    await firestoreService.logLogin({ userId: user.id, email, name, photoURL, loginAt: now, userAgent: 'CivicPulse iOS App' });
+  } catch (e) { console.warn('Failed to log login event:', e); }
+
+  try {
+    await firestoreService.upsertUserRecord({ id: user.id, email, name, photoURL, role: user.role, banType: 'none', createdAt: now, lastLoginAt: now });
+  } catch (e) { console.warn('Failed to upsert user record:', e); }
+
+  return user;
+};
+
+/** Delete and recreate the test account with the given password */
+const resetTestAccount = async (email: string, password: string): Promise<User> => {
+  // Try to delete the old account if we can sign into it with any means
+  // If we can't, just create fresh — Firebase will tell us if email is taken
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    const firebaseUser = result.user;
+    await updateProfile(firebaseUser, { displayName: 'Developer Tester' });
+    return await buildUserFromFirebase(firebaseUser, email);
+  } catch (createError: any) {
+    if (createError.code === 'auth/email-already-in-use') {
+      // Account exists with different password — can't auto-fix from client
+      // The old account needs to be deleted from Firebase Console, or the user
+      // needs to sign up fresh. Throw a clear message.
+      throw new Error('Test account exists with a different password. Delete it from Firebase Console and try again.');
+    }
+    throw new Error(createError.message || 'Failed to initialize test account.');
   }
 };
 
