@@ -23,3 +23,6 @@ export const TRENDING_RECENCY_DAYS = 7;
 
 // Super admin emails - same as web
 export const SUPER_ADMIN_EMAILS = ['notdev42@gmail.com', 'civicpulsehelpdesk@gmail.com'];
+
+// Test account — bypasses email verification
+export const TEST_ACCOUNT_EMAIL = 'developertest@gmail.com';

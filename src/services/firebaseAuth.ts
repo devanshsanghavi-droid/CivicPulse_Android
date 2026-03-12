@@ -21,7 +21,7 @@ import { auth } from "./firebaseConfig";
 import { firestoreService } from "./firestoreService";
 import { storageService } from "./storage";
 import { User } from "../types";
-import { SUPER_ADMIN_EMAILS } from "../constants";
+import { SUPER_ADMIN_EMAILS, TEST_ACCOUNT_EMAIL } from "../constants";
 
 // Call this once at app startup (in App.tsx)
 export const configureGoogleSignIn = () => {
@@ -125,20 +125,34 @@ export const signInWithGoogle = async (): Promise<User> => {
 /**
  * Sign up with email and password.
  * Sends a verification email and signs the user out — they must verify
- * before they can sign in.
+ * before they can sign in. Test account bypasses verification.
+ * Returns User if immediately signed in (test account), null if verification needed.
  */
-export const signUpWithEmail = async (email: string, password: string, displayName: string): Promise<void> => {
+export const signUpWithEmail = async (email: string, password: string, displayName: string): Promise<User | null> => {
+  const isTestAccount = email.toLowerCase() === TEST_ACCOUNT_EMAIL;
   let firebaseUser: FirebaseUser | null = null;
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     firebaseUser = result.user;
 
     await updateProfile(firebaseUser, { displayName });
+
+    // Test account skips verification — sign in immediately
+    if (isTestAccount) {
+      const now = new Date().toISOString();
+      const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+      const role = isSuperAdmin ? 'super_admin' : 'resident';
+      return await storageService.upsertUser({
+        id: firebaseUser.uid, name: displayName, email, role,
+        photoURL: '', createdAt: now, lastLoginAt: now, notifsEnabled: true,
+      });
+    }
+
     await sendEmailVerification(firebaseUser);
     await signOut(auth);
+    return null;
   } catch (error: any) {
-    // If account was created but verification/sign-out failed, clean up
-    if (firebaseUser) {
+    if (firebaseUser && !isTestAccount) {
       try { await firebaseUser.delete(); } catch { /* ignore */ }
       try { await signOut(auth); } catch { /* ignore */ }
     }
@@ -162,8 +176,9 @@ export const signInWithEmail = async (email: string, password: string): Promise<
     const result = await signInWithEmailAndPassword(auth, email, password);
     const firebaseUser = result.user;
 
-    // Block unverified email accounts
-    if (!firebaseUser.emailVerified) {
+    // Block unverified email accounts (test account bypasses)
+    const isTestAccount = email.toLowerCase() === TEST_ACCOUNT_EMAIL;
+    if (!firebaseUser.emailVerified && !isTestAccount) {
       try { await signOut(auth); } catch { /* AppContext guard is the fallback */ }
       const err = new Error('Please verify your email before signing in. Check your inbox for a verification link.') as any;
       err.code = 'auth/email-not-verified';

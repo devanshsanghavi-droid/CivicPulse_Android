@@ -69,17 +69,22 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       if (isSignUp) {
-        await signUpWithEmail(email.trim(), password, name.trim());
-        Alert.alert(
-          'Verify Your Email',
-          'Please check your email to verify your account before signing in.',
-          [{ text: 'OK' }]
-        );
-        // Switch to sign-in mode so they can log in after verifying
-        setIsSignUp(false);
-        setPassword('');
-        setConfirmPassword('');
-        setName('');
+        const signedInUser = await signUpWithEmail(email.trim(), password, name.trim());
+        if (signedInUser) {
+          // Test account — signed in immediately, no verification needed
+          await setUser(signedInUser);
+          navigation.navigate('Main');
+        } else {
+          Alert.alert(
+            'Verify Your Email',
+            'Please check your email to verify your account before signing in.',
+            [{ text: 'OK' }]
+          );
+          setIsSignUp(false);
+          setPassword('');
+          setConfirmPassword('');
+          setName('');
+        }
       } else {
         const user = await signInWithEmail(email.trim(), password);
         await setUser(user);
