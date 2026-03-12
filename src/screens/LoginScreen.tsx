@@ -72,6 +72,7 @@ export default function LoginScreen() {
         ? await signUpWithEmail(email.trim(), password, name.trim())
         : await signInWithEmail(email.trim(), password);
       await setUser(user);
+      navigation.navigate('Main');
     } catch (err: any) {
       Alert.alert(isSignUp ? 'Sign-Up Failed' : 'Sign-In Failed', err.message || 'Something went wrong.');
     } finally {
