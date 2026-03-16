@@ -8,7 +8,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { firestoreService } from '../services/firestoreService';
 import { useApp } from '../context/AppContext';
-import { Issue, Comment, UserRecord, LoginRecord, ResolutionSuggestion } from '../types';
+import { Issue, Comment, UserRecord, LoginRecord, ResolutionSuggestion, IssueStatus } from '../types';
 import { CATEGORIES } from '../constants';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
 
@@ -87,7 +87,7 @@ export default function AdminDashboardScreen() {
     .filter(i => !issueSearch || i.title.toLowerCase().includes(issueSearch.toLowerCase()) || i.description.toLowerCase().includes(issueSearch.toLowerCase()));
   const filteredUsers = userSearch ? users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase())) : users;
 
-  const handleStatusChange = (issue: Issue, newStatus: 'acknowledged' | 'resolved') => {
+  const handleStatusChange = (issue: Issue, newStatus: IssueStatus) => {
     if (Platform.OS === 'ios') {
       Alert.prompt(`Mark as ${newStatus}`, 'Optional public status note:', [
         { text: 'Cancel', style: 'cancel' },
@@ -243,6 +243,11 @@ export default function AdminDashboardScreen() {
                       </View>
                     </View>
                     <View style={[styles.actionRow, { borderTopColor: theme.border }]}>
+                      {issue.status !== 'open' && (
+                        <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.primary }]} onPress={() => handleStatusChange(issue, 'open')}>
+                          <Text style={[styles.actionBtnText, { color: theme.primary }]}>Reopen</Text>
+                        </TouchableOpacity>
+                      )}
                       {issue.status !== 'acknowledged' && (
                         <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.warning }]} onPress={() => handleStatusChange(issue, 'acknowledged')}>
                           <Text style={[styles.actionBtnText, { color: theme.warning }]}>Ack</Text>
