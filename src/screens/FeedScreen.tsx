@@ -149,14 +149,10 @@ export default function FeedScreen() {
           />
         </View>
 
-        {/* Category Filter - Horizontally Scrollable */}
+        {/* Category Filter */}
         <View style={styles.filterContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScroll}
-          >
-            {[{ id: undefined, name: 'All Reports' }, ...CATEGORIES].map(item => (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+            {[{ id: undefined, name: 'All' }, ...CATEGORIES].map(item => (
               <TouchableOpacity
                 key={item.id || 'all'}
                 style={[styles.filterChip, { backgroundColor: theme.card, borderColor: theme.border }, filterCat === item.id && { backgroundColor: theme.primary, borderColor: theme.primary }]}
@@ -170,48 +166,39 @@ export default function FeedScreen() {
           </ScrollView>
         </View>
 
-        {/* Status Filter */}
-        <View style={styles.filterContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScroll}
-          >
+        {/* Status + Count + Sort — single compact row */}
+        <View style={styles.controlRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlScroll}>
             {[
               { id: undefined, name: 'All' },
               { id: 'open', name: 'Open' },
-              { id: 'acknowledged', name: 'Acknowledged' },
+              { id: 'acknowledged', name: 'Ack' },
               { id: 'resolved', name: 'Resolved' },
             ].map(item => (
               <TouchableOpacity
                 key={item.id || 'all-status'}
-                style={[styles.filterChip, { backgroundColor: theme.card, borderColor: theme.border }, filterStatus === item.id && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                style={[styles.statusPill, { borderColor: theme.border }, filterStatus === item.id && { backgroundColor: theme.primary, borderColor: theme.primary }]}
                 onPress={() => setFilterStatus(item.id)}
               >
-                <Text style={[styles.filterChipText, { color: theme.textSecondary }, filterStatus === item.id && { color: '#ffffff' }]}>
+                <Text style={[styles.statusPillText, { color: theme.textMuted }, filterStatus === item.id && { color: '#ffffff' }]}>
                   {item.name}
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
-        </View>
-
-        {/* Sort Row */}
-        <View style={styles.sortRow}>
-          <Text style={[styles.sortCount, { color: theme.textMuted }]}>{issues.length} {issues.length === 1 ? 'Report' : 'Reports'}</Text>
-          <View style={styles.sortBtns}>
+            <Text style={[styles.sortDivider, { color: theme.border }]}>|</Text>
             {['trending', 'newest', 'upvoted'].map(s => (
               <TouchableOpacity
                 key={s}
                 onPress={() => setSort(s)}
-                style={[styles.sortBtn, sort === s && { backgroundColor: theme.primaryLight }]}
+                style={[styles.statusPill, { borderColor: theme.border }, sort === s && { backgroundColor: theme.primaryLight, borderColor: theme.primaryLight }]}
               >
-                <Text style={[styles.sortBtnText, { color: theme.textMuted }, sort === s && { color: theme.primary }]}>
+                <Text style={[styles.statusPillText, { color: theme.textMuted }, sort === s && { color: theme.primary }]}>
                   {s.charAt(0).toUpperCase() + s.slice(1)}
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
+          <Text style={[styles.sortCount, { color: theme.textMuted }]}>{issues.length}</Text>
         </View>
 
         {/* Issues List */}
@@ -261,29 +248,33 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     borderRadius: BORDER_RADIUS.lg,
-    marginHorizontal: SPACING.lg, marginTop: SPACING.md, marginBottom: SPACING.sm,
-    paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm,
+    marginHorizontal: SPACING.lg, marginTop: SPACING.sm, marginBottom: SPACING.xs,
+    paddingHorizontal: SPACING.md, paddingVertical: 6,
     borderWidth: 1,
   },
   searchIcon: { marginRight: SPACING.sm },
-  searchInput: { flex: 1, ...TYPOGRAPHY.body, fontSize: 15 },
+  searchInput: { flex: 1, ...TYPOGRAPHY.body, fontSize: 14 },
 
-  filterContainer: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
-  filterScroll: { gap: SPACING.sm },
+  filterContainer: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.xs },
+  filterScroll: { gap: 6 },
   filterChip: {
-    paddingHorizontal: SPACING.lg, paddingVertical: 7,
+    paddingHorizontal: SPACING.md, paddingVertical: 4,
     borderRadius: BORDER_RADIUS.round, borderWidth: 1,
   },
-  filterChipText: { ...TYPOGRAPHY.caption, fontWeight: '700' },
+  filterChipText: { fontSize: 11, fontWeight: '700' },
 
-  sortRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm,
+  controlRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: SPACING.lg, paddingVertical: SPACING.xs,
   },
-  sortCount: { ...TYPOGRAPHY.microLabel },
-  sortBtns: { flexDirection: 'row', gap: 4 },
-  sortBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: BORDER_RADIUS.sm },
-  sortBtnText: { ...TYPOGRAPHY.microLabel },
+  controlScroll: { gap: 6, alignItems: 'center' },
+  statusPill: {
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.round, borderWidth: 1,
+  },
+  statusPillText: { fontSize: 11, fontWeight: '700' },
+  sortDivider: { fontSize: 14, marginHorizontal: 4 },
+  sortCount: { ...TYPOGRAPHY.microLabel, marginLeft: SPACING.sm },
 
   list: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl, gap: SPACING.md },
 

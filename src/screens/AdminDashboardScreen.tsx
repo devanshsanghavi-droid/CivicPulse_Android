@@ -54,15 +54,12 @@ export default function AdminDashboardScreen() {
 
   const STATUS_COLORS = isDark ? STATUS_DARK : STATUS_LIGHT;
 
-  useEffect(() => { loadData(); }, [tab]);
+  const dedup = (arr: UserRecord[]) =>
+    Array.from(new Map(arr.map(u => [u.id, u])).values());
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const dedup = (arr: UserRecord[]) => {
-        const seen = new Set<string>();
-        return arr.filter(u => { if (seen.has(u.id)) return false; seen.add(u.id); return true; });
-      };
       if (tab === 'issues') { setIssues(await firestoreService.getIssues('newest')); }
       else if (tab === 'users') { setUsers(dedup(await firestoreService.getAllUsers())); }
       else if (tab === 'suggestions') { setSuggestions(await firestoreService.getResolutionSuggestions('pending')); }
@@ -77,6 +74,8 @@ export default function AdminDashboardScreen() {
     } catch (err) { console.error('Admin load error:', err); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => { loadData(); }, [tab]);
 
   const totalReports = issues.length;
   const openCount = issues.filter(i => i.status === 'open').length;

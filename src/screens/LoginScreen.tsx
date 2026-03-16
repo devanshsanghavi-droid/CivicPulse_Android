@@ -40,6 +40,7 @@ export default function LoginScreen() {
     try {
       const user = await signInWithGoogle();
       await setUser(user);
+      navigation.navigate('Main', { screen: 'Feed' });
     } catch (err: any) {
       Alert.alert('Sign-In Failed', err.message || 'Failed to sign in with Google. Please try again.');
     } finally {
@@ -70,22 +71,9 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       if (isSignUp) {
-        const signedInUser = await signUpWithEmail(email.trim(), password, name.trim());
-        if (signedInUser) {
-          // Test account — signed in immediately, no verification needed
-          await setUser(signedInUser);
-          navigation.navigate('Main', { screen: 'Feed' });
-        } else {
-          Alert.alert(
-            'Verify Your Email',
-            'Please check your email to verify your account before signing in.',
-            [{ text: 'OK' }]
-          );
-          setIsSignUp(false);
-          setPassword('');
-          setConfirmPassword('');
-          setName('');
-        }
+        const user = await signUpWithEmail(email.trim(), password, name.trim());
+        await setUser(user);
+        navigation.navigate('Main', { screen: 'Feed' });
       } else {
         const user = await signInWithEmail(email.trim(), password);
         await setUser(user);

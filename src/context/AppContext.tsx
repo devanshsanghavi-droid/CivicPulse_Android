@@ -9,7 +9,6 @@ import { firestoreService } from '../services/firestoreService';
 import { onAuthStateChange, convertFirebaseUserToAppUser, configureGoogleSignIn } from '../services/firebaseAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightTheme, darkTheme, AppTheme } from '../constants/theme';
-import { TEST_ACCOUNT_EMAIL } from '../constants';
 
 interface AppContextType {
   user: User | null;
@@ -60,20 +59,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     configureGoogleSignIn();
   }, []);
 
-  // Listen to Firebase auth state (same as web)
-  // Skip unverified email users — they must verify before being let in.
-  // Google's OAuth flow guarantees emailVerified=true; this guard is for password provider only.
+  // Listen to Firebase auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChange(async (firebaseUser) => {
       if (firebaseUser) {
-        const isEmailProvider = firebaseUser.providerData.some(p => p.providerId === 'password');
-        const isTestAccount = firebaseUser.email?.toLowerCase() === TEST_ACCOUNT_EMAIL;
-        if (isEmailProvider && !firebaseUser.emailVerified && !isTestAccount) {
-          // Don't set user or isAuthLoading — the sign-out that follows will
-          // fire another onAuthStateChanged(null) which settles the state.
-          setUserState(null);
-          return;
-        }
         const appUser = await convertFirebaseUserToAppUser(firebaseUser);
         setUserState(appUser);
       } else {

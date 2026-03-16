@@ -9,7 +9,6 @@ import {
   signInWithCredential,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  sendEmailVerification,
   updateProfile,
   User as FirebaseUser
 } from "firebase/auth";
@@ -124,35 +123,17 @@ export const signInWithGoogle = async (): Promise<User> => {
 
 /**
  * Sign up with email and password.
- * Sends a verification email and signs the user out — they must verify
- * before they can sign in. Test account bypasses verification.
- * Returns User if immediately signed in (test account), null if verification needed.
+ * Creates account and immediately signs in — no email verification required.
  */
-export const signUpWithEmail = async (email: string, password: string, displayName: string): Promise<User | null> => {
-  const isTestAccount = email.toLowerCase() === TEST_ACCOUNT_EMAIL;
+export const signUpWithEmail = async (email: string, password: string, displayName: string): Promise<User> => {
   let firebaseUser: FirebaseUser | null = null;
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     firebaseUser = result.user;
-
     await updateProfile(firebaseUser, { displayName });
-
-    // Test account skips verification — sign in immediately
-    if (isTestAccount) {
-      const now = new Date().toISOString();
-      const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
-      const role = isSuperAdmin ? 'super_admin' : 'resident';
-      return await storageService.upsertUser({
-        id: firebaseUser.uid, name: displayName, email, role,
-        photoURL: '', createdAt: now, lastLoginAt: now, notifsEnabled: true,
-      });
-    }
-
-    await sendEmailVerification(firebaseUser);
-    await signOut(auth);
-    return null;
+    return await buildUserFromFirebase(firebaseUser, email);
   } catch (error: any) {
-    if (firebaseUser && !isTestAccount) {
+    if (firebaseUser) {
       try { await firebaseUser.delete(); } catch { /* ignore */ }
       try { await signOut(auth); } catch { /* ignore */ }
     }
@@ -169,7 +150,6 @@ export const signUpWithEmail = async (email: string, password: string, displayNa
 
 /**
  * Sign in with email and password.
- * Rejects unverified accounts — signs them out and throws.
  * Test account auto-creates if it doesn't exist or has wrong password.
  */
 export const signInWithEmail = async (email: string, password: string): Promise<User> => {
@@ -177,17 +157,7 @@ export const signInWithEmail = async (email: string, password: string): Promise<
 
   try {
     const result = await signInWithEmailAndPassword(auth, email, password);
-    const firebaseUser = result.user;
-
-    // Block unverified email accounts (test account bypasses)
-    if (!firebaseUser.emailVerified && !isTestAccount) {
-      try { await signOut(auth); } catch { /* AppContext guard is the fallback */ }
-      const err = new Error('Please verify your email before signing in. Check your inbox for a verification link.') as any;
-      err.code = 'auth/email-not-verified';
-      throw err;
-    }
-
-    return await buildUserFromFirebase(firebaseUser, email);
+    return await buildUserFromFirebase(result.user, email);
   } catch (error: any) {
     // Test account: auto-create if not found, or recreate if wrong password
     if (isTestAccount && (
@@ -199,7 +169,6 @@ export const signInWithEmail = async (email: string, password: string): Promise<
     }
 
     switch (error.code) {
-      case 'auth/email-not-verified': throw new Error('Please verify your email before signing in. Check your inbox for a verification link.');
       case 'auth/user-not-found': throw new Error('No account found with this email.');
       case 'auth/wrong-password':
       case 'auth/invalid-credential': throw new Error('Incorrect password. Please try again.');
