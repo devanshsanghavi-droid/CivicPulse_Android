@@ -30,7 +30,8 @@ import {
   UserRole,
   BanType,
   Notification,
-  Report
+  Report,
+  ResolutionSuggestion
 } from '../types';
 import { calculateTrendingScore } from './storage';
 
@@ -440,5 +441,32 @@ export const firestoreService = {
 
   setUserRole: async (userId: string, role: UserRole): Promise<void> => {
     await updateDoc(doc(db, 'users', userId), { role });
-  }
+  },
+
+  // --- Resolution Suggestions ---
+
+  submitResolutionSuggestion: async (data: Omit<ResolutionSuggestion, 'id'>): Promise<ResolutionSuggestion> => {
+    const docRef = await addDoc(collection(db, 'resolutionSuggestions'), data);
+    return { id: docRef.id, ...data };
+  },
+
+  getResolutionSuggestions: async (status?: string): Promise<ResolutionSuggestion[]> => {
+    try {
+      const q = status
+        ? query(collection(db, 'resolutionSuggestions'), where('status', '==', status))
+        : query(collection(db, 'resolutionSuggestions'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as ResolutionSuggestion))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } catch { return []; }
+  },
+
+  reviewResolutionSuggestion: async (id: string, status: 'approved' | 'rejected', reviewedBy: string): Promise<void> => {
+    await updateDoc(doc(db, 'resolutionSuggestions', id), {
+      status,
+      reviewedBy,
+      reviewedAt: new Date().toISOString(),
+    });
+  },
 };

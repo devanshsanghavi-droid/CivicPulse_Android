@@ -33,6 +33,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -73,7 +74,7 @@ export default function LoginScreen() {
         if (signedInUser) {
           // Test account — signed in immediately, no verification needed
           await setUser(signedInUser);
-          navigation.navigate('Main');
+          navigation.navigate('Main', { screen: 'Feed' });
         } else {
           Alert.alert(
             'Verify Your Email',
@@ -88,7 +89,7 @@ export default function LoginScreen() {
       } else {
         const user = await signInWithEmail(email.trim(), password);
         await setUser(user);
-        navigation.navigate('Main');
+        navigation.navigate('Main', { screen: 'Feed' });
       }
     } catch (err: any) {
       Alert.alert(isSignUp ? 'Sign-Up Failed' : 'Sign-In Failed', err.message || 'Something went wrong.');
@@ -229,17 +230,20 @@ export default function LoginScreen() {
                     <View style={styles.inputWrapper}>
                       <Ionicons name="lock-closed-outline" size={16} color="#64748b" style={styles.inputIcon} />
                       <TextInput
-                        style={styles.input}
+                        style={[styles.input, { flex: 1 }]}
                         placeholder="Confirm password"
                         placeholderTextColor="#64748b"
                         value={confirmPassword}
                         onChangeText={setConfirmPassword}
-                        secureTextEntry={!showPassword}
+                        secureTextEntry={!showConfirmPassword}
                         autoCapitalize="none"
                         autoCorrect={false}
                         returnKeyType="done"
                         onSubmitEditing={handleEmailAuth}
                       />
+                      <TouchableOpacity onPress={() => setShowConfirmPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} size={16} color="#64748b" />
+                      </TouchableOpacity>
                     </View>
                   )}
 

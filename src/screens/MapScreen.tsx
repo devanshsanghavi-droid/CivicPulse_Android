@@ -5,6 +5,8 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator
 } from 'react-native';
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
+import ClusteredMapView from 'react-native-map-clustering';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -35,6 +37,7 @@ const DEFAULT_REGION: Region = {
 };
 
 export default function MapScreen() {
+  const insets = useSafeAreaInsets();
   const { user, locationExplained, setLocationExplained, isDark, theme } = useApp();
   const navigation = useNavigation<Nav>();
   const mapRef = useRef<MapView>(null);
@@ -81,13 +84,17 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <MapView
+      <ClusteredMapView
         ref={mapRef}
         style={styles.map}
         initialRegion={region}
         showsUserLocation
         showsMyLocationButton={false}
         userInterfaceStyle={isDark ? 'dark' : 'light'}
+        clusterColor="#f59e0b"
+        clusterTextColor="#ffffff"
+        radius={50}
+        minPoints={2}
       >
         {issues.filter(issue => issue.latitude != null && issue.longitude != null).map(issue => {
           const color = theme[issue.status as 'open' | 'acknowledged' | 'resolved'] || theme.open;
@@ -115,16 +122,16 @@ export default function MapScreen() {
             </Marker>
           );
         })}
-      </MapView>
+      </ClusteredMapView>
 
       {/* Header pill */}
-      <View style={[styles.headerPill, { backgroundColor: overlayBg }]}>
+      <View style={[styles.headerPill, { backgroundColor: overlayBg, top: 16 + insets.top }]}>
         <View style={[styles.headerDot, { backgroundColor: theme.primary }]} />
         <Text style={[styles.headerText, { color: theme.textPrimary }]}>LIVE GEOSPATIAL FEED</Text>
       </View>
 
       {loading && (
-        <View style={[styles.loadingOverlay, { backgroundColor: overlayBgLight }]}>
+        <View style={[styles.loadingOverlay, { backgroundColor: overlayBgLight, top: 60 + insets.top }]}>
           <ActivityIndicator size="small" color={theme.primary} />
         </View>
       )}
@@ -162,7 +169,7 @@ export default function MapScreen() {
       </TouchableOpacity>
 
       {/* Guest banner — floats above the map */}
-      {!user && <GuestBanner style={styles.guestBanner} />}
+      {!user && <GuestBanner style={[styles.guestBanner, { top: 72 + insets.top }]} />}
 
       <AuthPromptToast ref={toastRef} />
     </View>
@@ -174,7 +181,7 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
 
   headerPill: {
-    position: 'absolute', top: 16, alignSelf: 'center',
+    position: 'absolute', alignSelf: 'center',
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     borderRadius: BORDER_RADIUS.round, paddingHorizontal: SPACING.lg, paddingVertical: 10,
     ...SHADOWS.medium,
@@ -183,7 +190,7 @@ const styles = StyleSheet.create({
   headerText: { ...TYPOGRAPHY.microLabel },
 
   loadingOverlay: {
-    position: 'absolute', top: 60, alignSelf: 'center',
+    position: 'absolute', alignSelf: 'center',
     borderRadius: BORDER_RADIUS.lg, padding: SPACING.sm,
   },
 
@@ -212,7 +219,6 @@ const styles = StyleSheet.create({
 
   guestBanner: {
     position: 'absolute',
-    top: 72,
     left: 0,
     right: 0,
     marginHorizontal: 0,

@@ -114,6 +114,20 @@ export interface LoginRecord {
   userAgent: string;
 }
 
+export interface ResolutionSuggestion {
+  id: string;
+  issueId: string;
+  issueTitle: string;
+  suggestedBy: string;
+  suggestedByName: string;
+  suggestedByPhotoURL?: string;
+  reason?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
 export type BanType = 'none' | 'temporary' | 'permanent';
 
 export interface UserRecord {

@@ -210,6 +210,44 @@ export default function IssueDetailScreen() {
               )}
             </TouchableOpacity>
 
+            {user && issue.status !== 'resolved' && (
+              <TouchableOpacity
+                style={[styles.suggestResolveBtn, { borderColor: theme.success }]}
+                onPress={() => {
+                  Alert.alert(
+                    'Suggest Resolution',
+                    'Do you believe this issue has been resolved? An admin will review your suggestion.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Submit',
+                        onPress: async () => {
+                          try {
+                            await firestoreService.submitResolutionSuggestion({
+                              issueId: issue.id,
+                              issueTitle: issue.title,
+                              suggestedBy: user.id,
+                              suggestedByName: user.name,
+                              suggestedByPhotoURL: user.photoURL || '',
+                              status: 'pending',
+                              createdAt: new Date().toISOString(),
+                            });
+                            Alert.alert('Submitted', 'Your resolution suggestion has been submitted for admin review.');
+                          } catch {
+                            Alert.alert('Error', 'Failed to submit suggestion.');
+                          }
+                        },
+                      },
+                    ]
+                  );
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle-outline" size={18} color={theme.success} />
+                <Text style={[styles.suggestResolveBtnText, { color: theme.success }]}>Suggest as Resolved</Text>
+              </TouchableOpacity>
+            )}
+
             <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>COMMUNITY DISCUSSION</Text>
 
             {comments.length === 0 ? (
@@ -315,6 +353,8 @@ const styles = StyleSheet.create({
 
   upvoteBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md, justifyContent: 'center', marginBottom: SPACING.xl },
   upvoteBtnText: { ...TYPOGRAPHY.body, fontSize: 15, fontWeight: '800' },
+  suggestResolveBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md, justifyContent: 'center', marginBottom: SPACING.xl },
+  suggestResolveBtnText: { ...TYPOGRAPHY.body, fontSize: 15, fontWeight: '800' },
 
   sectionLabel: { ...TYPOGRAPHY.sectionLabel, marginBottom: SPACING.md },
 

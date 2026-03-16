@@ -92,6 +92,7 @@ export default function FeedScreen() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [sort, setSort] = useState('trending');
   const [filterCat, setFilterCat] = useState<string | undefined>();
+  const [filterStatus, setFilterStatus] = useState<string | undefined>();
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -100,17 +101,29 @@ export default function FeedScreen() {
     setLoading(true);
     try {
       const data = await firestoreService.getIssues(sort, filterCat);
-      const filtered = data.filter(i =>
+      let filtered = data.filter(i =>
         i.title.toLowerCase().includes(search.toLowerCase()) ||
         i.description.toLowerCase().includes(search.toLowerCase())
       );
+      // Status filter
+      if (filterStatus) {
+        filtered = filtered.filter(i => i.status === filterStatus);
+      }
+      // Sort resolved to bottom (unless explicitly filtering for resolved)
+      if (!filterStatus) {
+        filtered.sort((a, b) => {
+          if (a.status === 'resolved' && b.status !== 'resolved') return 1;
+          if (a.status !== 'resolved' && b.status === 'resolved') return -1;
+          return 0;
+        });
+      }
       setIssues(filtered);
     } catch (err) {
       console.error('Failed to load issues:', err);
     } finally {
       setLoading(false);
     }
-  }, [sort, filterCat, search]);
+  }, [sort, filterCat, filterStatus, search]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -150,6 +163,32 @@ export default function FeedScreen() {
                 onPress={() => setFilterCat(item.id)}
               >
                 <Text style={[styles.filterChipText, { color: theme.textSecondary }, filterCat === item.id && { color: '#ffffff' }]}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Status Filter */}
+        <View style={styles.filterContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
+          >
+            {[
+              { id: undefined, name: 'All' },
+              { id: 'open', name: 'Open' },
+              { id: 'acknowledged', name: 'Acknowledged' },
+              { id: 'resolved', name: 'Resolved' },
+            ].map(item => (
+              <TouchableOpacity
+                key={item.id || 'all-status'}
+                style={[styles.filterChip, { backgroundColor: theme.card, borderColor: theme.border }, filterStatus === item.id && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                onPress={() => setFilterStatus(item.id)}
+              >
+                <Text style={[styles.filterChipText, { color: theme.textSecondary }, filterStatus === item.id && { color: '#ffffff' }]}>
                   {item.name}
                 </Text>
               </TouchableOpacity>

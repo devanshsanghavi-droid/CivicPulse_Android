@@ -46,10 +46,10 @@ export default function ProfileScreen() {
   }
 
   const handleLogout = async () => {
-    Alert.alert('Terminate Session', 'Are you sure you want to sign out?', [
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Sign Out', style: 'destructive',
+        text: 'Log Out', style: 'destructive',
         onPress: async () => {
           try {
             await signOutUser();
@@ -186,10 +186,21 @@ export default function ProfileScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Logout */}
+        {/* Visit Website */}
+        <TouchableOpacity style={[styles.settingRow, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => Linking.openURL('https://civicpulseweb.pages.dev/')}>
+          <View style={styles.settingLeft}>
+            <Ionicons name="globe-outline" size={20} color={theme.textMuted} />
+            <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>Visit Website</Text>
+          </View>
+          <View style={styles.settingRight}>
+            <Ionicons name="open-outline" size={16} color={theme.textMuted} />
+          </View>
+        </TouchableOpacity>
+
+        {/* Log Out */}
         <TouchableOpacity style={[styles.logoutBtn, isDark && { backgroundColor: '#1c1917', borderColor: '#7f1d1d' }]} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color={theme.error} />
-          <Text style={[styles.logoutText, { color: theme.error }]}>TERMINATE SESSION</Text>
+          <Text style={[styles.logoutText, { color: theme.error }]}>LOG OUT</Text>
         </TouchableOpacity>
 
       </ScrollView>

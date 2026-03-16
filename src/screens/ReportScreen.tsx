@@ -125,7 +125,6 @@ export default function ReportScreen() {
 
   const handleSubmit = async () => {
     if (!title.trim()) return Alert.alert('Required', 'Please enter a title.');
-    if (!description.trim()) return Alert.alert('Required', 'Please enter a description.');
     if (!categoryId) return Alert.alert('Required', 'Please select a category.');
     const effectiveLoc = getEffectiveLocation();
     if (!effectiveLoc) return Alert.alert('Required', 'Location is required.');
@@ -224,7 +223,7 @@ export default function ReportScreen() {
                 </View>
               </View>
               <View style={styles.field}>
-                <Text style={[styles.label, { color: theme.textMuted }]}>DESCRIPTION</Text>
+                <Text style={[styles.label, { color: theme.textMuted }]}>DESCRIPTION (OPTIONAL)</Text>
                 <TextInput style={[styles.input, styles.textArea, { backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Describe the issue in detail..." placeholderTextColor={theme.textMuted} value={description} onChangeText={setDescription} multiline numberOfLines={4} textAlignVertical="top" />
               </View>
             </View>

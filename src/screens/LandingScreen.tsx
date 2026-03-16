@@ -51,7 +51,7 @@ export default function LandingScreen() {
 
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: theme.primary, ...SHADOWS.colored(theme.primary) }]}
-            onPress={() => navigation.navigate('Main')}
+            onPress={() => navigation.navigate('Main', { screen: 'Feed' })}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>Browse Issues</Text>

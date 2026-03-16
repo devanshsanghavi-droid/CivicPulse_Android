@@ -8,11 +8,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { firestoreService } from '../services/firestoreService';
 import { useApp } from '../context/AppContext';
-import { Issue, Comment, UserRecord, LoginRecord } from '../types';
+import { Issue, Comment, UserRecord, LoginRecord, ResolutionSuggestion } from '../types';
 import { CATEGORIES } from '../constants';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
 
-type AdminTab = 'issues' | 'users' | 'activity';
+type AdminTab = 'issues' | 'users' | 'activity' | 'suggestions';
 type IssueFilter = 'all' | 'open' | 'acknowledged' | 'resolved';
 
 const STATUS_LIGHT: Record<string, { bg: string; text: string }> = {
@@ -38,6 +38,7 @@ export default function AdminDashboardScreen() {
   const [deletedComments, setDeletedComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [issueFilter, setIssueFilter] = useState<IssueFilter>('all');
+  const [issueSearch, setIssueSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
   const [userIssues, setUserIssues] = useState<Issue[]>([]);
@@ -47,6 +48,7 @@ export default function AdminDashboardScreen() {
   const [banUnit, setBanUnit] = useState<'hours' | 'days'>('hours');
   const [banPermanent, setBanPermanent] = useState(false);
   const [banReason, setBanReason] = useState('');
+  const [suggestions, setSuggestions] = useState<ResolutionSuggestion[]>([]);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ banned: true, deleted: false, registered: false, logins: false });
   const [activitySearch, setActivitySearch] = useState('');
 
@@ -57,15 +59,20 @@ export default function AdminDashboardScreen() {
   const loadData = async () => {
     setLoading(true);
     try {
+      const dedup = (arr: UserRecord[]) => {
+        const seen = new Set<string>();
+        return arr.filter(u => { if (seen.has(u.id)) return false; seen.add(u.id); return true; });
+      };
       if (tab === 'issues') { setIssues(await firestoreService.getIssues('newest')); }
-      else if (tab === 'users') { setUsers(await firestoreService.getAllUsers()); }
+      else if (tab === 'users') { setUsers(dedup(await firestoreService.getAllUsers())); }
+      else if (tab === 'suggestions') { setSuggestions(await firestoreService.getResolutionSuggestions('pending')); }
       else {
         const [banned, delI, delC, logins, allU] = await Promise.all([
           firestoreService.getBannedUsers(), firestoreService.getDeletedIssues(),
           firestoreService.getDeletedComments(), firestoreService.getLoginHistory(100),
           firestoreService.getAllUsers(),
         ]);
-        setBannedUsers(banned); setDeletedIssues(delI); setDeletedComments(delC); setLoginHistory(logins); setUsers(allU);
+        setBannedUsers(banned); setDeletedIssues(delI); setDeletedComments(delC); setLoginHistory(logins); setUsers(dedup(allU));
       }
     } catch (err) { console.error('Admin load error:', err); }
     finally { setLoading(false); }
@@ -76,7 +83,9 @@ export default function AdminDashboardScreen() {
   const ackCount = issues.filter(i => i.status === 'acknowledged').length;
   const resolvedCount = issues.filter(i => i.status === 'resolved').length;
   const totalVotes = issues.reduce((s, i) => s + i.upvoteCount, 0);
-  const filteredIssues = issueFilter === 'all' ? issues : issues.filter(i => i.status === issueFilter);
+  const filteredIssues = issues
+    .filter(i => issueFilter === 'all' || i.status === issueFilter)
+    .filter(i => !issueSearch || i.title.toLowerCase().includes(issueSearch.toLowerCase()) || i.description.toLowerCase().includes(issueSearch.toLowerCase()));
   const filteredUsers = userSearch ? users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase())) : users;
 
   const handleStatusChange = (issue: Issue, newStatus: 'acknowledged' | 'resolved') => {
@@ -171,8 +180,8 @@ export default function AdminDashboardScreen() {
       </View>
 
       <View style={styles.tabs}>
-        {(['issues', 'users', 'activity'] as AdminTab[]).map(t => {
-          const icons: Record<AdminTab, keyof typeof Ionicons.glyphMap> = { issues: 'list', users: 'people', activity: 'pulse' };
+        {(['issues', 'users', 'activity', 'suggestions'] as AdminTab[]).map(t => {
+          const icons: Record<AdminTab, keyof typeof Ionicons.glyphMap> = { issues: 'list', users: 'people', activity: 'pulse', suggestions: 'checkmark-circle' };
           return (
             <TouchableOpacity key={t} style={[styles.tab, { backgroundColor: theme.card, borderColor: theme.border }, tab === t && { backgroundColor: theme.primaryLight, borderColor: theme.primaryBorder }]} onPress={() => setTab(t)}>
               <Ionicons name={icons[t]} size={16} color={tab === t ? theme.primary : theme.textMuted} />
@@ -189,6 +198,10 @@ export default function AdminDashboardScreen() {
 
           {tab === 'issues' && (
             <>
+              <View style={[styles.searchBar, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Ionicons name="search" size={16} color={theme.textMuted} />
+                <TextInput style={[styles.searchInput, { color: theme.textPrimary }]} placeholder="Search issues by title or description..." placeholderTextColor={theme.textMuted} value={issueSearch} onChangeText={setIssueSearch} />
+              </View>
               <View style={styles.filterRow}>
                 {[
                   { key: 'all' as IssueFilter, label: 'Total', count: totalReports, color: theme.primary },
@@ -354,6 +367,57 @@ export default function AdminDashboardScreen() {
               ))}
             </>
           )}
+
+          {tab === 'suggestions' && (
+            <>
+              {suggestions.length === 0 ? (
+                <View style={styles.centered}><Text style={[styles.issueMeta, { color: theme.textMuted, textAlign: 'center', marginTop: SPACING.xxl }]}>No pending suggestions</Text></View>
+              ) : (
+                suggestions.map(s => (
+                  <View key={s.id} style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Text style={[styles.cardTitle, { color: theme.textPrimary }]} numberOfLines={2}>{s.issueTitle}</Text>
+                    <View style={styles.issueMetaRow}>
+                      <Text style={[styles.issueMeta, { color: theme.textMuted }]}>
+                        Suggested by {s.suggestedByName} · {new Date(s.createdAt).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <View style={[styles.actionRow, { borderTopColor: theme.border }]}>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, { borderColor: theme.success }]}
+                        onPress={() => {
+                          Alert.alert('Approve Suggestion', `Mark "${s.issueTitle}" as resolved?`, [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Approve', onPress: async () => {
+                                try {
+                                  await firestoreService.reviewResolutionSuggestion(s.id, 'approved', user?.id || '');
+                                  await firestoreService.updateIssueStatus(s.issueId, 'resolved', `Resolved based on community suggestion by ${s.suggestedByName}`);
+                                  setSuggestions(prev => prev.filter(x => x.id !== s.id));
+                                } catch { Alert.alert('Error', 'Failed to approve suggestion.'); }
+                              }
+                            }
+                          ]);
+                        }}
+                      >
+                        <Text style={[styles.actionBtnText, { color: theme.success }]}>Approve & Resolve</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, { borderColor: theme.error }]}
+                        onPress={async () => {
+                          try {
+                            await firestoreService.reviewResolutionSuggestion(s.id, 'rejected', user?.id || '');
+                            setSuggestions(prev => prev.filter(x => x.id !== s.id));
+                          } catch { Alert.alert('Error', 'Failed to reject suggestion.'); }
+                        }}
+                      >
+                        <Text style={[styles.actionBtnText, { color: theme.error }]}>Reject</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </>
+          )}
         </ScrollView>
       )}
 
@@ -434,7 +498,7 @@ export default function AdminDashboardScreen() {
                           </TouchableOpacity>
                         </View>
                       )}
-                      {isSuperAdmin && selectedUser.role !== 'super_admin' && (
+                      {isSuperAdmin && (
                         <View style={styles.promoteRow}>
                           {selectedUser.role === 'resident' || selectedUser.role === 'guest' ? (
                             <TouchableOpacity style={[styles.promoteBtn, { borderColor: theme.primary }]} onPress={handlePromote}>

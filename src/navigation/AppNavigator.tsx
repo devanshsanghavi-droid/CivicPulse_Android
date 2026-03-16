@@ -62,17 +62,17 @@ function GuestLoginTabButton() {
 
 // Bottom Tab Navigator (shown after login)
 function MainTabs() {
-  const { user, isAdmin } = useApp();
+  const { user, isAdmin, theme } = useApp();
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: '#2563eb',
-        tabBarInactiveTintColor: '#9ca3af',
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.textMuted,
         tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#f3f4f6',
+          backgroundColor: theme.card,
+          borderTopColor: theme.border,
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 6,
