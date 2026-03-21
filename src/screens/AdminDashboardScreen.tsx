@@ -54,8 +54,11 @@ export default function AdminDashboardScreen() {
 
   const STATUS_COLORS = isDark ? STATUS_DARK : STATUS_LIGHT;
 
-  const dedup = (arr: UserRecord[]) =>
-    Array.from(new Map(arr.map(u => [u.id, u])).values());
+  const dedup = (arr: UserRecord[]) => {
+    // Dedup by ID first, then by email (same person can have multiple Firestore docs)
+    const byId = Array.from(new Map(arr.map(u => [u.id, u])).values());
+    return Array.from(new Map(byId.map(u => [u.email.toLowerCase(), u])).values());
+  };
 
   const loadData = async () => {
     setLoading(true);
