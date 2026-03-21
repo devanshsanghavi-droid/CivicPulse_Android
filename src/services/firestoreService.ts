@@ -34,6 +34,11 @@ import {
   ResolutionSuggestion
 } from '../types';
 import { calculateTrendingScore } from './storage';
+import {
+  checkRateLimit, checkBanned, checkDuplicate,
+  sanitizeText, validatePhotoUri, validatePhotoBlob,
+  LIMITS
+} from './security';
 
 export const firestoreService = {
 
@@ -79,12 +84,16 @@ export const firestoreService = {
   },
 
   createIssue: async (data: Partial<Issue>): Promise<Issue> => {
+    await checkBanned(data.createdBy!);
+    await checkRateLimit('createIssue', data.createdBy!);
+    checkDuplicate(data.createdBy!, data.title!, data.categoryId!);
+
     const newIssue = {
       createdBy: data.createdBy!,
-      creatorName: data.creatorName || 'Resident',
+      creatorName: sanitizeText(data.creatorName || 'Resident', LIMITS.USER_NAME),
       creatorPhotoURL: data.creatorPhotoURL || '',
-      title: data.title!,
-      description: data.description!,
+      title: sanitizeText(data.title!, LIMITS.ISSUE_TITLE),
+      description: sanitizeText(data.description || '', LIMITS.ISSUE_DESCRIPTION),
       categoryId: data.categoryId!,
       status: 'open' as IssueStatus,
       latitude: data.latitude!,
@@ -103,12 +112,15 @@ export const firestoreService = {
   updateIssueStatus: async (id: string, status: IssueStatus, note?: string): Promise<void> => {
     await updateDoc(doc(db, 'issues', id), {
       status,
-      statusNote: note || '',
+      statusNote: note ? sanitizeText(note, LIMITS.STATUS_NOTE) : '',
       updatedAt: new Date().toISOString()
     });
   },
 
   toggleUpvote: async (issueId: string, userId: string, isAdding: boolean): Promise<void> => {
+    await checkBanned(userId);
+    await checkRateLimit('toggleUpvote', userId);
+
     // Update Firestore upvote count
     await updateDoc(doc(db, 'issues', issueId), {
       upvoteCount: increment(isAdding ? 1 : -1)
@@ -157,12 +169,15 @@ export const firestoreService = {
     userPhotoURL: string,
     body: string
   ): Promise<Comment> => {
+    await checkBanned(userId);
+    await checkRateLimit('addComment', userId);
+
     const newComment = {
       issueId,
       userId,
-      userName,
+      userName: sanitizeText(userName, LIMITS.USER_NAME),
       userPhotoURL,
-      body,
+      body: sanitizeText(body, LIMITS.COMMENT_BODY),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       hidden: false
@@ -277,8 +292,10 @@ export const firestoreService = {
   // Replaces web's FileReader/base64 approach with React Native's blob upload
 
   uploadPhoto: async (localUri: string, issueId: string): Promise<string> => {
+    validatePhotoUri(localUri);
     const response = await fetch(localUri);
     const blob = await response.blob();
+    await validatePhotoBlob(blob);
     const filename = `issues/${issueId}/${Date.now()}.jpg`;
     const storageRef = ref(storage, filename);
     await uploadBytes(storageRef, blob);
@@ -288,7 +305,13 @@ export const firestoreService = {
   // --- Reports ---
 
   submitReport: async (report: Omit<Report, 'id'>): Promise<void> => {
-    await addDoc(collection(db, 'reports'), report);
+    await checkRateLimit('submitReport', report.reporterUserId);
+    const sanitized = {
+      ...report,
+      reason: sanitizeText(report.reason, LIMITS.RESOLUTION_REASON),
+      details: report.details ? sanitizeText(report.details, LIMITS.ISSUE_DESCRIPTION) : undefined,
+    };
+    await addDoc(collection(db, 'reports'), sanitized);
   },
 
   getReports: async (): Promise<Report[]> => {
@@ -446,8 +469,14 @@ export const firestoreService = {
   // --- Resolution Suggestions ---
 
   submitResolutionSuggestion: async (data: Omit<ResolutionSuggestion, 'id'>): Promise<ResolutionSuggestion> => {
-    const docRef = await addDoc(collection(db, 'resolutionSuggestions'), data);
-    return { id: docRef.id, ...data };
+    await checkBanned(data.suggestedBy);
+    await checkRateLimit('submitSuggestion', data.suggestedBy);
+    const sanitized = {
+      ...data,
+      reason: data.reason ? sanitizeText(data.reason, LIMITS.RESOLUTION_REASON) : undefined,
+    };
+    const docRef = await addDoc(collection(db, 'resolutionSuggestions'), sanitized);
+    return { id: docRef.id, ...sanitized };
   },
 
   getResolutionSuggestions: async (status?: string): Promise<ResolutionSuggestion[]> => {

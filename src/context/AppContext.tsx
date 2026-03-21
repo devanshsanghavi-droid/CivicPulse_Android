@@ -9,6 +9,7 @@ import { firestoreService } from '../services/firestoreService';
 import { onAuthStateChange, convertFirebaseUserToAppUser, configureGoogleSignIn } from '../services/firebaseAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightTheme, darkTheme, AppTheme } from '../constants/theme';
+import { checkBanned, clearBanCache } from '../services/security';
 
 interface AppContextType {
   user: User | null;
@@ -21,6 +22,8 @@ interface AppContextType {
   locationExplained: boolean;
   setLocationExplained: (v: boolean) => void;
   isAuthLoading: boolean;
+  isBanned: boolean;
+  banMessage: string;
   isDark: boolean;
   toggleDarkMode: () => void;
   theme: AppTheme;
@@ -42,6 +45,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [locationExplained, setLocationExplained] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDark, setIsDark] = useState(false);
+  const [isBanned, setIsBanned] = useState(false);
+  const [banMessage, setBanMessage] = useState('');
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const unreadCount = notifs.filter(n => !n.read).length;
@@ -112,11 +117,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
   };
 
-  // Poll notifications every 10 seconds (same pattern as web's 5s interval)
+  // Check ban status
+  const checkBanStatus = async () => {
+    if (!user) return;
+    try {
+      clearBanCache(user.id);
+      await checkBanned(user.id);
+      setIsBanned(false);
+      setBanMessage('');
+    } catch (err: any) {
+      setIsBanned(true);
+      setBanMessage(err.message || 'Your account has been suspended.');
+    }
+  };
+
+  // Poll notifications and ban status every 10 seconds
   useEffect(() => {
     if (!user) return;
     refreshNotifs();
-    const interval = setInterval(refreshNotifs, 10000);
+    checkBanStatus();
+    const interval = setInterval(() => {
+      refreshNotifs();
+      checkBanStatus();
+    }, 10000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -132,6 +155,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       locationExplained,
       setLocationExplained,
       isAuthLoading,
+      isBanned,
+      banMessage,
       isDark,
       toggleDarkMode,
       theme,

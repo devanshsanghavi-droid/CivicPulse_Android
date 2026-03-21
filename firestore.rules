@@ -1,0 +1,145 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'];
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+    }
+
+    function isNotBanned() {
+      let userData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return userData.banType == 'none' ||
+        (userData.banType == 'temporary' && userData.bannedUntil < request.time);
+    }
+
+    function validString(field, maxLen) {
+      return field is string && field.size() <= maxLen;
+    }
+
+    // --- Issues ---
+    match /issues/{issueId} {
+      // Anyone can read non-hidden issues (guest browsing)
+      allow read: if resource.data.hidden == false || isAdmin();
+
+      // Authenticated, non-banned users can create issues
+      allow create: if isAuthenticated() && isNotBanned()
+        && request.resource.data.createdBy == request.auth.uid
+        && validString(request.resource.data.title, 80)
+        && validString(request.resource.data.description, 2000)
+        && request.resource.data.status == 'open'
+        && request.resource.data.hidden == false
+        && request.resource.data.upvoteCount == 0;
+
+      // Admins can update any issue (status, hidden, etc.)
+      // Issue owner can update description only
+      allow update: if isAdmin() ||
+        (isOwner(resource.data.createdBy) && isNotBanned()
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.status == resource.data.status);
+
+      allow delete: if isAdmin();
+    }
+
+    // --- Comments ---
+    match /comments/{commentId} {
+      allow read: if resource.data.hidden == false || isAdmin();
+
+      allow create: if isAuthenticated() && isNotBanned()
+        && request.resource.data.userId == request.auth.uid
+        && validString(request.resource.data.body, 1000)
+        && request.resource.data.hidden == false;
+
+      allow update: if isAdmin() ||
+        (isOwner(resource.data.userId) && isNotBanned()
+          && validString(request.resource.data.body, 1000));
+
+      allow delete: if isAdmin();
+    }
+
+    // --- Upvotes ---
+    match /upvotes/{upvoteId} {
+      allow read: if true;
+
+      // Upvote doc ID must be {issueId}_{userId}
+      allow create: if isAuthenticated() && isNotBanned()
+        && request.resource.data.userId == request.auth.uid;
+
+      allow delete: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      // Users can read their own record; admins can read all
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Users can create/update their own basic info
+      allow create: if isOwner(userId);
+
+      // Users can update their own non-privileged fields
+      // Only admins can change role, banType, bannedAt, bannedUntil, banReason
+      allow update: if isAdmin() ||
+        (isOwner(userId)
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.banType == resource.data.banType);
+    }
+
+    // --- Notifications ---
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // --- Reports ---
+    match /reports/{reportId} {
+      allow create: if isAuthenticated() && isNotBanned()
+        && request.resource.data.reporterUserId == request.auth.uid
+        && validString(request.resource.data.reason, 500);
+
+      allow read: if isAdmin();
+      allow update: if isAdmin();
+    }
+
+    // --- Resolution Suggestions ---
+    match /resolutionSuggestions/{sugId} {
+      allow create: if isAuthenticated() && isNotBanned()
+        && request.resource.data.suggestedBy == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.suggestedBy == request.auth.uid);
+
+      allow update: if isAdmin();
+    }
+
+    // --- Login Records ---
+    match /logins/{loginId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid;
+
+      allow read: if isAdmin();
+    }
+
+    // --- Deny everything else ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

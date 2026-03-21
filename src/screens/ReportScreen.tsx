@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, MapPressEvent } from 'react-native-maps';
 import { useApp } from '../context/AppContext';
 import { firestoreService } from '../services/firestoreService';
+import { checkRateLimit } from '../services/security';
 import { CATEGORIES } from '../constants';
 import { useNavigation } from '@react-navigation/native';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
@@ -78,6 +79,7 @@ export default function ReportScreen() {
     if (!addressQuery.trim()) return;
     setAddressSearching(true);
     try {
+      if (user) await checkRateLimit('addressSearch', user.id);
       const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addressQuery)}&format=json&limit=1`);
       const data = await res.json();
       if (data.length > 0) {
@@ -224,7 +226,7 @@ export default function ReportScreen() {
               </View>
               <View style={styles.field}>
                 <Text style={[styles.label, { color: theme.textMuted }]}>DESCRIPTION (OPTIONAL)</Text>
-                <TextInput style={[styles.input, styles.textArea, { backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Describe the issue in detail..." placeholderTextColor={theme.textMuted} value={description} onChangeText={setDescription} multiline numberOfLines={4} textAlignVertical="top" />
+                <TextInput style={[styles.input, styles.textArea, { backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Describe the issue in detail..." placeholderTextColor={theme.textMuted} value={description} onChangeText={setDescription} multiline numberOfLines={4} textAlignVertical="top" maxLength={2000} />
               </View>
             </View>
           )}
@@ -266,7 +268,7 @@ export default function ReportScreen() {
               {locationTab === 'address' && (
                 <View style={styles.field}>
                   <View style={styles.addressRow}>
-                    <TextInput style={[styles.input, { flex: 1, backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Enter an address..." placeholderTextColor={theme.textMuted} value={addressQuery} onChangeText={setAddressQuery} onSubmitEditing={searchAddress} returnKeyType="search" />
+                    <TextInput style={[styles.input, { flex: 1, backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Enter an address..." placeholderTextColor={theme.textMuted} value={addressQuery} onChangeText={setAddressQuery} onSubmitEditing={searchAddress} returnKeyType="search" maxLength={200} />
                     <TouchableOpacity style={[styles.searchBtn, { backgroundColor: theme.primary }]} onPress={searchAddress} disabled={addressSearching}>
                       {addressSearching ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="search" size={18} color="#fff" />}
                     </TouchableOpacity>

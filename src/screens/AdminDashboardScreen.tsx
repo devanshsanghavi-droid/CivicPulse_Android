@@ -199,7 +199,7 @@ export default function AdminDashboardScreen() {
             <>
               <View style={[styles.searchBar, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Ionicons name="search" size={16} color={theme.textMuted} />
-                <TextInput style={[styles.searchInput, { color: theme.textPrimary }]} placeholder="Search issues by title or description..." placeholderTextColor={theme.textMuted} value={issueSearch} onChangeText={setIssueSearch} />
+                <TextInput style={[styles.searchInput, { color: theme.textPrimary }]} placeholder="Search issues by title or description..." placeholderTextColor={theme.textMuted} value={issueSearch} onChangeText={setIssueSearch} maxLength={100} />
               </View>
               <View style={styles.filterRow}>
                 {[
@@ -273,7 +273,7 @@ export default function AdminDashboardScreen() {
             <>
               <View style={[styles.searchBar, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Ionicons name="search" size={16} color={theme.textMuted} />
-                <TextInput style={[styles.searchInput, { color: theme.textPrimary }]} placeholder="Search by name or email..." placeholderTextColor={theme.textMuted} value={userSearch} onChangeText={setUserSearch} />
+                <TextInput style={[styles.searchInput, { color: theme.textPrimary }]} placeholder="Search by name or email..." placeholderTextColor={theme.textMuted} value={userSearch} onChangeText={setUserSearch} maxLength={100} />
               </View>
               {filteredUsers.map(u => (
                 <TouchableOpacity key={u.id} style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => openUserModal(u)} activeOpacity={0.7}>
@@ -298,7 +298,7 @@ export default function AdminDashboardScreen() {
             <>
               <View style={[styles.searchBar, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Ionicons name="search" size={16} color={theme.textMuted} />
-                <TextInput style={[styles.searchInput, { color: theme.textPrimary }]} placeholder="Search activity..." placeholderTextColor={theme.textMuted} value={activitySearch} onChangeText={setActivitySearch} />
+                <TextInput style={[styles.searchInput, { color: theme.textPrimary }]} placeholder="Search activity..." placeholderTextColor={theme.textMuted} value={activitySearch} onChangeText={setActivitySearch} maxLength={100} />
               </View>
 
               <TouchableOpacity style={[styles.sectionHeader, { borderBottomColor: theme.border }]} onPress={() => toggleSection('banned')}>
@@ -485,7 +485,7 @@ export default function AdminDashboardScreen() {
                       ) : (
                         <View style={styles.banControls}>
                           <View style={styles.banRow}>
-                            <TextInput style={[styles.banInput, { flex: 1, backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Duration" placeholderTextColor={theme.textMuted} value={banDuration} onChangeText={setBanDuration} keyboardType="numeric" editable={!banPermanent} />
+                            <TextInput style={[styles.banInput, { flex: 1, backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Duration" placeholderTextColor={theme.textMuted} value={banDuration} onChangeText={setBanDuration} keyboardType="numeric" editable={!banPermanent} maxLength={5} />
                             {(['hours', 'days'] as const).map(u => (
                               <TouchableOpacity key={u} style={[styles.unitBtn, { backgroundColor: theme.card, borderColor: theme.border }, banUnit === u && { backgroundColor: theme.primaryLight, borderColor: theme.primaryBorder }]} onPress={() => setBanUnit(u)} disabled={banPermanent}>
                                 <Text style={[styles.unitBtnText, { color: theme.textMuted }, banUnit === u && { color: theme.primary }]}>{u.charAt(0).toUpperCase() + u.slice(1)}</Text>
@@ -496,7 +496,7 @@ export default function AdminDashboardScreen() {
                             <Ionicons name={banPermanent ? 'checkbox' : 'square-outline'} size={20} color={theme.error} />
                             <Text style={[styles.permToggleText, { color: theme.error }]}>Permanent ban</Text>
                           </TouchableOpacity>
-                          <TextInput style={[styles.banInput, { minHeight: 60, backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Ban reason (optional)..." placeholderTextColor={theme.textMuted} value={banReason} onChangeText={setBanReason} multiline />
+                          <TextInput style={[styles.banInput, { minHeight: 60, backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Ban reason (optional)..." placeholderTextColor={theme.textMuted} value={banReason} onChangeText={setBanReason} multiline maxLength={500} />
                           <TouchableOpacity style={[styles.banFullBtn, { backgroundColor: theme.error }]} onPress={handleBanUser}>
                             <Ionicons name="ban" size={18} color="#fff" /><Text style={styles.banFullBtnText}>Apply Ban</Text>
                           </TouchableOpacity>

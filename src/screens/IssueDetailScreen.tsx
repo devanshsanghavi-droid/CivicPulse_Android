@@ -283,6 +283,7 @@ export default function IssueDetailScreen() {
                 value={newComment}
                 onChangeText={setNewComment}
                 multiline
+                maxLength={1000}
               />
               <TouchableOpacity
                 style={[styles.commentSendBtn, { backgroundColor: theme.primary }, (!newComment.trim() || commenting) && { opacity: 0.5 }]}

@@ -176,6 +176,7 @@ export default function LoginScreen() {
                         onChangeText={setName}
                         autoCapitalize="words"
                         returnKeyType="next"
+                        maxLength={50}
                       />
                     </View>
                   )}
@@ -192,6 +193,7 @@ export default function LoginScreen() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       returnKeyType="next"
+                      maxLength={100}
                     />
                   </View>
 
@@ -208,6 +210,7 @@ export default function LoginScreen() {
                       autoCorrect={false}
                       returnKeyType={isSignUp ? "next" : "done"}
                       onSubmitEditing={isSignUp ? undefined : handleEmailAuth}
+                      maxLength={128}
                     />
                     <TouchableOpacity onPress={() => setShowPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={16} color="#64748b" />
@@ -228,6 +231,7 @@ export default function LoginScreen() {
                         autoCorrect={false}
                         returnKeyType="done"
                         onSubmitEditing={handleEmailAuth}
+                        maxLength={128}
                       />
                       <TouchableOpacity onPress={() => setShowConfirmPassword(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                         <Ionicons name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} size={16} color="#64748b" />
