@@ -59,6 +59,7 @@ export default function IssueDetailScreen() {
           firestoreService.getComments(issueId),
         ]);
         if (cancelled) return;
+        console.log('[IssueDetail] Full issue data:', JSON.stringify(issueData, null, 2));
         setIssue(issueData);
         setComments(commentsData);
         if (user) {
@@ -120,11 +121,11 @@ export default function IssueDetailScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-          {issue.photos.length > 0 && (
+          {issue.photos?.length > 0 && (
             <View style={styles.photoContainer}>
               <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.photoScroll} onScroll={handlePhotoScroll} scrollEventThrottle={16}>
                 {issue.photos.map((photo) => (
-                  <Image key={photo.id} source={{ uri: photo.url }} style={styles.photo} />
+                  <Image key={photo.id} source={{ uri: photo.url }} style={styles.photo} resizeMode="cover" />
                 ))}
               </ScrollView>
               {issue.photos.length > 1 && (

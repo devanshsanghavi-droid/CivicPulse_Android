@@ -40,6 +40,31 @@ import {
   LIMITS
 } from './security';
 
+// Normalize issue photos from various Firestore field formats
+function normalizeIssuePhotos(raw: any): Issue {
+  const issue = raw as Issue;
+  // If photos field is already a valid array of {id, url} objects, use it
+  if (Array.isArray(issue.photos) && issue.photos.length > 0 && issue.photos[0]?.url) {
+    return issue;
+  }
+  // Check alternate field names from web app or older data
+  const data = raw as any;
+  const altPhotos: string[] =
+    data.imageUrls || data.images || data.photoUrls || [];
+  if (Array.isArray(altPhotos) && altPhotos.length > 0) {
+    // Convert string URLs to IssuePhoto objects
+    issue.photos = altPhotos.map((url: string, i: number) => ({
+      id: `photo_${i}`,
+      url: typeof url === 'string' ? url : (url as any).url || '',
+    })).filter(p => p.url);
+  }
+  // Ensure photos is always an array
+  if (!Array.isArray(issue.photos)) {
+    issue.photos = [];
+  }
+  return issue;
+}
+
 export const firestoreService = {
 
   // --- Issues ---
@@ -51,7 +76,7 @@ export const firestoreService = {
         where('hidden', '==', false)
       );
       const snapshot = await getDocs(q);
-      let issues: Issue[] = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Issue));
+      let issues: Issue[] = snapshot.docs.map(d => normalizeIssuePhotos({ id: d.id, ...d.data() }));
 
       if (categoryId) {
         issues = issues.filter(i => i.categoryId === categoryId);
@@ -76,7 +101,7 @@ export const firestoreService = {
   getIssue: async (id: string): Promise<Issue | null> => {
     try {
       const snap = await getDoc(doc(db, 'issues', id));
-      return snap.exists() ? { id: snap.id, ...snap.data() } as Issue : null;
+      return snap.exists() ? normalizeIssuePhotos({ id: snap.id, ...snap.data() }) : null;
     } catch (error) {
       console.error('getIssue error:', error);
       return null;
@@ -107,6 +132,13 @@ export const firestoreService = {
     };
     const docRef = await addDoc(collection(db, 'issues'), newIssue);
     return { id: docRef.id, ...newIssue };
+  },
+
+  updateIssuePhotos: async (id: string, photos: { id: string; url: string }[]): Promise<void> => {
+    await updateDoc(doc(db, 'issues', id), {
+      photos,
+      updatedAt: new Date().toISOString()
+    });
   },
 
   updateIssueStatus: async (id: string, status: IssueStatus, note?: string): Promise<void> => {
@@ -330,7 +362,7 @@ export const firestoreService = {
       const q = query(collection(db, 'issues'), where('createdBy', '==', userId));
       const snapshot = await getDocs(q);
       return snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() } as Issue))
+        .map(d => normalizeIssuePhotos({ id: d.id, ...d.data() }))
         .filter(i => !i.hidden)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch {
@@ -357,7 +389,7 @@ export const firestoreService = {
     try {
       const snapshot = await getDocs(collection(db, 'issues'));
       return snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() } as Issue))
+        .map(d => normalizeIssuePhotos({ id: d.id, ...d.data() }))
         .filter(i => i.hidden)
         .sort((a, b) => new Date(b.deletedAt || b.updatedAt).getTime() - new Date(a.deletedAt || a.updatedAt).getTime());
     } catch {

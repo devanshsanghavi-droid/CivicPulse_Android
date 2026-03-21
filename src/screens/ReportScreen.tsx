@@ -140,7 +140,15 @@ export default function ReportScreen() {
         latitude: effectiveLoc.latitude, longitude: effectiveLoc.longitude,
         address: getEffectiveAddress(), photos: [],
       });
-      await Promise.all(photos.map(async (uri, i) => ({ id: `photo_${i}`, url: await firestoreService.uploadPhoto(uri, issue.id) })));
+      if (photos.length > 0) {
+        const uploadedPhotos = await Promise.all(
+          photos.map(async (uri, i) => ({
+            id: `photo_${i}`,
+            url: await firestoreService.uploadPhoto(uri, issue.id),
+          }))
+        );
+        await firestoreService.updateIssuePhotos(issue.id, uploadedPhotos);
+      }
       Alert.alert('Report Submitted! ✅', 'Your issue has been reported.', [{ text: 'View Feed', onPress: () => navigation.goBack() }]);
       setTitle(''); setDescription(''); setCategoryId(''); setPhotos([]); setCurrentStep(1);
     } catch (err: any) { Alert.alert('Submission Failed', err.message || 'Please try again.'); }
