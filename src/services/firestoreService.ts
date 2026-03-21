@@ -316,6 +316,13 @@ export const firestoreService = {
     }
   },
 
+  getUserRecord: async (userId: string): Promise<UserRecord | null> => {
+    try {
+      const snap = await getDoc(doc(db, 'users', userId));
+      return snap.exists() ? { id: snap.id, ...snap.data() } as UserRecord : null;
+    } catch { return null; }
+  },
+
   updateUserRecord: async (userId: string, data: Partial<UserRecord>): Promise<void> => {
     await updateDoc(doc(db, 'users', userId), data);
   },

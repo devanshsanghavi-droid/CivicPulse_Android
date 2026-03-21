@@ -133,14 +133,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Poll notifications and ban status every 10 seconds
+  // Sync role from Firestore (catches admin promotions/demotions in near real-time)
+  const syncRole = async () => {
+    if (!user) return;
+    try {
+      const userDoc = await firestoreService.getUserRecord(user.id);
+      if (userDoc && userDoc.role !== user.role) {
+        const updated = { ...user, role: userDoc.role };
+        setUserState(updated);
+        await storageService.setCurrentUser(updated);
+      }
+    } catch { /* silent — role sync is best-effort */ }
+  };
+
+  // Poll notifications, ban status, and role every 10 seconds
   useEffect(() => {
     if (!user) return;
     refreshNotifs();
     checkBanStatus();
+    syncRole();
     const interval = setInterval(() => {
       refreshNotifs();
       checkBanStatus();
+      syncRole();
     }, 10000);
     return () => clearInterval(interval);
   }, [user]);
