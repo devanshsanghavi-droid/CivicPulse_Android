@@ -19,7 +19,7 @@ import {
 import { auth } from "./firebaseConfig";
 import { firestoreService } from "./firestoreService";
 import { storageService } from "./storage";
-import { User } from "../types";
+import { User, UserRole } from "../types";
 import { SUPER_ADMIN_EMAILS, TEST_ACCOUNT_EMAIL } from "../constants";
 
 // Call this once at app startup (in App.tsx)
@@ -187,7 +187,15 @@ const buildUserFromFirebase = async (firebaseUser: FirebaseUser, email: string):
   const photoURL = firebaseUser.photoURL || '';
   const now = new Date().toISOString();
   const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
-  const role = isSuperAdmin ? 'super_admin' : 'resident';
+
+  // Fetch existing role from Firestore (preserves admin promotions)
+  let firestoreRole: UserRole | null = null;
+  try {
+    const userDoc = await firestoreService.getUserRecord(firebaseUser.uid);
+    if (userDoc) firestoreRole = userDoc.role;
+  } catch { /* fall back to defaults */ }
+
+  const role: UserRole = firestoreRole || (isSuperAdmin ? 'super_admin' : 'resident');
 
   const user = await storageService.upsertUser({
     id: firebaseUser.uid, name, email, role, photoURL,
@@ -199,7 +207,14 @@ const buildUserFromFirebase = async (firebaseUser: FirebaseUser, email: string):
   } catch (e) { console.warn('Failed to log login event:', e); }
 
   try {
-    await firestoreService.upsertUserRecord({ id: user.id, email, name, photoURL, role: user.role, banType: 'none', createdAt: now, lastLoginAt: now });
+    // Only set banType on first creation — don't overwrite existing bans
+    const existingRecord = await firestoreService.getUserRecord(user.id);
+    const record: any = { id: user.id, email, name, photoURL, role: user.role, lastLoginAt: now };
+    if (!existingRecord) {
+      record.banType = 'none';
+      record.createdAt = now;
+    }
+    await firestoreService.upsertUserRecord(record);
   } catch (e) { console.warn('Failed to upsert user record:', e); }
 
   return user;
@@ -268,12 +283,20 @@ export const convertFirebaseUserToAppUser = async (
   const name = firebaseUser.displayName || email.split('@')[0] || 'User';
   const photoURL = firebaseUser.photoURL || '';
 
-  // Check if user exists in local storage first
+  // Always fetch role from Firestore (catches admin promotions/demotions)
+  let firestoreRole: UserRole | null = null;
+  try {
+    const { firestoreService } = require('./firestoreService');
+    const userDoc = await firestoreService.getUserRecord(firebaseUser.uid);
+    if (userDoc) firestoreRole = userDoc.role;
+  } catch { /* Firestore unavailable — fall back to local/defaults */ }
+
+  // Check if user exists in local storage
   const existingUser = await storageService.getCurrentUser();
   if (existingUser && existingUser.email === email) {
-    // Always re-check super admin status from the email list
+    // Priority: Firestore role > super admin email list > existing local role
     const shouldBeSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
-    const role = shouldBeSuperAdmin ? 'super_admin' : existingUser.role;
+    const role: UserRole = firestoreRole || (shouldBeSuperAdmin ? 'super_admin' : existingUser.role);
     return await storageService.upsertUser({ ...existingUser, photoURL, name, role });
   }
 
@@ -283,7 +306,7 @@ export const convertFirebaseUserToAppUser = async (
     id: firebaseUser.uid,
     name,
     email,
-    role: isSuperAdmin ? 'super_admin' : 'resident',
+    role: firestoreRole || (isSuperAdmin ? 'super_admin' : 'resident') as UserRole,
     photoURL,
     createdAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
