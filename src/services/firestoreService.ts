@@ -308,7 +308,7 @@ export const firestoreService = {
     await checkRateLimit('submitReport', report.reporterUserId);
     const sanitized = {
       ...report,
-      reason: sanitizeText(report.reason, LIMITS.RESOLUTION_REASON),
+      reason: sanitizeText(report.reason, LIMITS.REPORT_REASON),
       details: report.details ? sanitizeText(report.details, LIMITS.ISSUE_DESCRIPTION) : undefined,
     };
     await addDoc(collection(db, 'reports'), sanitized);
@@ -436,6 +436,9 @@ export const firestoreService = {
   },
 
   banUser: async (userId: string, banType: 'temporary' | 'permanent', reason?: string, durationHours?: number): Promise<void> => {
+    if (banType === 'temporary' && (!durationHours || durationHours <= 0)) {
+      throw new Error('Temporary bans require a duration greater than 0.');
+    }
     const now = new Date();
     const updates: Record<string, any> = {
       banType,
@@ -444,7 +447,7 @@ export const firestoreService = {
     };
     if (banType === 'temporary' && durationHours) {
       const expiry = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
-      updates.bannedUntil = expiry.toISOString();
+      updates.bannedUntil = Timestamp.fromDate(expiry);
     } else if (banType === 'permanent') {
       updates.bannedUntil = '';
     }

@@ -83,6 +83,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (u) {
       await storageService.setCurrentUser(u);
     } else {
+      setIsBanned(false);
+      setBanMessage('');
+      clearBanCache();
       await storageService.clearCurrentUser();
     }
   };
@@ -117,11 +120,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
   };
 
-  // Check ban status
+  // Check ban status (uses 60s cache — no need to clear cache on every poll)
   const checkBanStatus = async () => {
     if (!user) return;
     try {
-      clearBanCache(user.id);
       await checkBanned(user.id);
       setIsBanned(false);
       setBanMessage('');

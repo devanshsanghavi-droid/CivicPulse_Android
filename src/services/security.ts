@@ -5,6 +5,36 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 
+// --- Custom error classes for reliable error identification ---
+
+export class SecurityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SecurityError';
+  }
+}
+
+export class RateLimitError extends SecurityError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RateLimitError';
+  }
+}
+
+export class BanError extends SecurityError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BanError';
+  }
+}
+
+export class DuplicateError extends SecurityError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DuplicateError';
+  }
+}
+
 // --- Content length limits ---
 
 export const LIMITS = {
@@ -16,6 +46,7 @@ export const LIMITS = {
   BAN_REASON: 500,
   SEARCH_QUERY: 100,
   STATUS_NOTE: 500,
+  REPORT_REASON: 500,
   RESOLUTION_REASON: 500,
   EMAIL: 100,
   PASSWORD: 128,
@@ -53,14 +84,14 @@ export async function checkRateLimit(action: RateLimitAction, userId: string): P
     if (timestamps.length >= max) {
       const waitMs = windowMs - (now - timestamps[0]);
       const waitMin = Math.ceil(waitMs / 60000);
-      throw new Error(`Too many requests. Please wait ${waitMin} minute${waitMin !== 1 ? 's' : ''} before trying again.`);
+      throw new RateLimitError(`Too many requests. Please wait ${waitMin} minute${waitMin !== 1 ? 's' : ''} before trying again.`);
     }
 
     timestamps.push(now);
     await AsyncStorage.setItem(key, JSON.stringify(timestamps));
   } catch (err: any) {
-    // Re-throw rate limit errors, swallow storage errors
-    if (err.message?.startsWith('Too many requests')) throw err;
+    if (err instanceof RateLimitError) throw err;
+    // Swallow AsyncStorage errors — fail open rather than blocking the user
   }
 }
 
@@ -103,7 +134,7 @@ export async function checkBanned(userId: string): Promise<void> {
 
   if (cached && now - cached.checkedAt < BAN_CACHE_TTL) {
     if (cached.banned) {
-      throw new Error(cached.reason || 'Your account has been suspended.');
+      throw new BanError(cached.reason || 'Your account has been suspended.');
     }
     return;
   }
@@ -120,7 +151,7 @@ export async function checkBanned(userId: string): Promise<void> {
         ? `Your account has been permanently suspended. Reason: ${data.banReason}`
         : 'Your account has been permanently suspended.';
       banCache.set(userId, { banned: true, reason, checkedAt: now });
-      throw new Error(reason);
+      throw new BanError(reason);
     }
 
     if (banType === 'temporary') {
@@ -130,14 +161,14 @@ export async function checkBanned(userId: string): Promise<void> {
           ? `Your account is suspended until ${bannedUntil.toLocaleDateString()}. Reason: ${data.banReason}`
           : `Your account is suspended until ${bannedUntil.toLocaleDateString()}.`;
         banCache.set(userId, { banned: true, reason, checkedAt: now });
-        throw new Error(reason);
+        throw new BanError(reason);
       }
     }
 
     banCache.set(userId, { banned: false, checkedAt: now });
   } catch (err: any) {
-    // Re-throw ban errors, swallow Firestore errors
-    if (err.message?.includes('suspended')) throw err;
+    if (err instanceof BanError) throw err;
+    // Swallow Firestore errors — fail open rather than blocking non-banned users
   }
 }
 
@@ -156,7 +187,8 @@ const recentSubmissions = new Map<string, number>();
 const DUPLICATE_WINDOW_MS = 30 * 1000; // 30 seconds
 
 export function checkDuplicate(userId: string, ...fields: string[]): void {
-  const hash = `${userId}_${fields.join('_')}`;
+  // Use null byte separator to avoid hash collisions
+  const hash = [userId, ...fields].join('\0');
   const now = Date.now();
 
   // Clean old entries
@@ -167,7 +199,7 @@ export function checkDuplicate(userId: string, ...fields: string[]): void {
   }
 
   if (recentSubmissions.has(hash)) {
-    throw new Error('Duplicate submission detected. Please wait a moment before trying again.');
+    throw new DuplicateError('Duplicate submission detected. Please wait a moment before trying again.');
   }
 
   recentSubmissions.set(hash, now);
@@ -179,24 +211,24 @@ export function validatePhotoUri(uri: string): void {
   const validExtensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'];
   const lower = uri.toLowerCase();
 
-  // Skip validation for data URIs and content:// URIs (from image picker)
+  // Skip validation for data URIs, content:// URIs, and ph:// URIs (from image picker)
   if (lower.startsWith('data:') || lower.startsWith('content://') || lower.startsWith('ph://')) {
     return;
   }
 
-  const hasValidExt = validExtensions.some(ext => lower.includes(ext));
+  const hasValidExt = validExtensions.some(ext => lower.endsWith(ext));
   if (!hasValidExt && !lower.includes('imagepicker') && !lower.includes('camera')) {
-    throw new Error('Invalid photo format. Please use JPG, PNG, or HEIC images.');
+    throw new SecurityError('Invalid photo format. Please use JPG, PNG, or HEIC images.');
   }
 }
 
 export async function validatePhotoBlob(blob: Blob): Promise<void> {
   if (blob.size > LIMITS.PHOTO_MAX_SIZE_BYTES) {
     const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-    throw new Error(`Photo is too large (${sizeMB}MB). Maximum size is 10MB.`);
+    throw new SecurityError(`Photo is too large (${sizeMB}MB). Maximum size is 10MB.`);
   }
 
   if (blob.type && !blob.type.startsWith('image/')) {
-    throw new Error('Invalid file type. Only images are allowed.');
+    throw new SecurityError('Invalid file type. Only images are allowed.');
   }
 }

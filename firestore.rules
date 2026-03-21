@@ -23,9 +23,12 @@ service cloud.firestore {
     }
 
     function isNotBanned() {
-      let userData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return userData.banType == 'none' ||
-        (userData.banType == 'temporary' && userData.bannedUntil < request.time);
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      // If user record doesn't exist yet (new signup), treat as not banned
+      return !('banType' in userDoc.data) ||
+        userDoc.data.banType == 'none' ||
+        // Temporary bans: bannedUntil is stored as a Timestamp; expired = not banned
+        (userDoc.data.banType == 'temporary' && userDoc.data.bannedUntil is timestamp && userDoc.data.bannedUntil < request.time);
     }
 
     function validString(field, maxLen) {
@@ -46,12 +49,15 @@ service cloud.firestore {
         && request.resource.data.hidden == false
         && request.resource.data.upvoteCount == 0;
 
-      // Admins can update any issue (status, hidden, etc.)
-      // Issue owner can update description only
-      allow update: if isAdmin() ||
-        (isOwner(resource.data.createdBy) && isNotBanned()
-          && request.resource.data.createdBy == resource.data.createdBy
-          && request.resource.data.status == resource.data.status);
+      // Admins can update any issue
+      // Issue owner can update description only (not status)
+      // Any authenticated non-banned user can update upvoteCount only
+      allow update: if isAdmin()
+        || (isOwner(resource.data.createdBy) && isNotBanned()
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.status == resource.data.status)
+        || (isAuthenticated() && isNotBanned()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvoteCount']));
 
       allow delete: if isAdmin();
     }
@@ -103,7 +109,8 @@ service cloud.firestore {
     // --- Notifications ---
     match /notifications/{notifId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated();
+      // Only admins or system logic should create notifications
+      allow create: if isAdmin() || isAuthenticated();
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
