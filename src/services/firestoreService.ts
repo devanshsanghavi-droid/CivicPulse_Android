@@ -174,7 +174,7 @@ export const firestoreService = {
     });
   },
 
-  toggleUpvote: async (issueId: string, userId: string, isAdding: boolean): Promise<void> => {
+  toggleUpvote: async (issueId: string, userId: string, isAdding: boolean, userName?: string, userPhotoURL?: string): Promise<void> => {
     await checkBanned(userId);
     await checkRateLimit('toggleUpvote', userId);
 
@@ -186,10 +186,22 @@ export const firestoreService = {
     // Track the upvote record in 'upvotes' collection
     const upvoteRef = doc(db, 'upvotes', `${issueId}_${userId}`);
     if (isAdding) {
-      await setDoc(upvoteRef, { issueId, userId });
+      const upvoteData: Record<string, any> = { issueId, userId };
+      if (userName) upvoteData.userName = userName;
+      if (userPhotoURL) upvoteData.userPhotoURL = userPhotoURL;
+      await setDoc(upvoteRef, upvoteData);
     } else {
       await deleteDoc(upvoteRef);
     }
+  },
+
+  getUpvoters: async (issueId: string): Promise<{ userId: string; userName?: string; userPhotoURL?: string }[]> => {
+    const q = query(collection(db, 'upvotes'), where('issueId', '==', issueId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => {
+      const data = d.data();
+      return { userId: data.userId, userName: data.userName, userPhotoURL: data.userPhotoURL };
+    });
   },
 
   deleteIssue: async (id: string, adminName: string): Promise<void> => {

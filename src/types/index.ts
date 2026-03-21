@@ -93,6 +93,8 @@ export interface Upvote {
   id: string;
   issueId: string;
   userId: string;
+  userName?: string;
+  userPhotoURL?: string;
 }
 
 export interface DigestSettings {

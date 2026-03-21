@@ -54,6 +54,7 @@ export default function IssueDetailScreen() {
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolveReason, setResolveReason] = useState('');
   const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
+  const [upvoters, setUpvoters] = useState<{ userId: string; userName?: string; userPhotoURL?: string }[]>([]);
   const toastRef = useRef<AuthPromptToastRef>(null);
 
   useEffect(() => {
@@ -71,6 +72,11 @@ export default function IssueDetailScreen() {
         if (user) {
           const upvoted = await storageService.hasUpvoted(issueId, user.id);
           if (!cancelled) setHasUpvoted(upvoted);
+          // Load upvoters if current user is the creator
+          if (issueData && issueData.createdBy === user.id) {
+            const voters = await firestoreService.getUpvoters(issueId);
+            if (!cancelled) setUpvoters(voters);
+          }
         }
       } catch (err) { console.error('IssueDetail load error:', err); }
       finally { if (!cancelled) setLoading(false); }
@@ -89,9 +95,17 @@ export default function IssueDetailScreen() {
     try {
       const result = await storageService.toggleUpvote(issueId, user.id);
       const isAdding = result === 'added';
-      await firestoreService.toggleUpvote(issueId, user.id, isAdding);
+      await firestoreService.toggleUpvote(issueId, user.id, isAdding, user.name, user.photoURL);
       setHasUpvoted(isAdding);
       setIssue(prev => prev ? { ...prev, upvoteCount: prev.upvoteCount + (isAdding ? 1 : -1) } : prev);
+      // Update upvoters list if creator is viewing
+      if (issue && issue.createdBy === user.id) {
+        if (isAdding) {
+          setUpvoters(prev => [...prev, { userId: user.id, userName: user.name, userPhotoURL: user.photoURL }]);
+        } else {
+          setUpvoters(prev => prev.filter(v => v.userId !== user.id));
+        }
+      }
     } catch { Alert.alert('Error', 'Failed to update upvote.'); }
     finally { setUpvoting(false); }
   };
@@ -237,7 +251,7 @@ export default function IssueDetailScreen() {
             )}
 
             <TouchableOpacity
-              style={[styles.upvoteBtn, { borderColor: theme.primary }, hasUpvoted && { backgroundColor: theme.primary }]}
+              style={[styles.upvoteBtn, { borderColor: theme.primary }, hasUpvoted && { backgroundColor: theme.primary }, !(user && issue.createdBy === user.id && upvoters.length > 0) && { marginBottom: SPACING.xl }]}
               onPress={handleUpvote} disabled={upvoting} activeOpacity={0.8}>
               {upvoting ? (
                 <ActivityIndicator size="small" color={hasUpvoted ? '#ffffff' : theme.primary} />
@@ -250,6 +264,44 @@ export default function IssueDetailScreen() {
                 </>
               )}
             </TouchableOpacity>
+
+            {/* Upvoter avatars — visible to issue creator */}
+            {user && issue.createdBy === user.id && upvoters.length > 0 && (
+              <View style={styles.upvotersRow}>
+                <View style={styles.upvoterAvatars}>
+                  {upvoters.slice(0, 8).map((voter, i) => (
+                    <TouchableOpacity
+                      key={voter.userId}
+                      style={[styles.upvoterAvatar, { marginLeft: i === 0 ? 0 : -8, zIndex: upvoters.length - i }]}
+                      onPress={() => navigation.navigate('UserProfile', { userId: voter.userId })}
+                      activeOpacity={0.8}
+                    >
+                      {voter.userPhotoURL ? (
+                        <Image source={{ uri: voter.userPhotoURL }} style={[styles.upvoterImg, { borderColor: theme.background }]} />
+                      ) : (
+                        <View style={[styles.upvoterImgPlaceholder, { borderColor: theme.background, backgroundColor: theme.border }]}>
+                          <Ionicons name="person" size={10} color={theme.textMuted} />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                  {upvoters.length > 8 && (
+                    <View style={[styles.upvoterAvatar, { marginLeft: -8, zIndex: 0 }]}>
+                      <View style={[styles.upvoterImgPlaceholder, { borderColor: theme.background, backgroundColor: theme.primaryLight }]}>
+                        <Text style={[styles.upvoterOverflowText, { color: theme.primary }]}>+{upvoters.length - 8}</Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+                <Text style={[styles.upvotersLabel, { color: theme.textMuted }]}>
+                  {upvoters.length === 1
+                    ? `${upvoters[0].userName || 'Someone'} upvoted`
+                    : upvoters.length <= 3
+                      ? `${upvoters.map(v => v.userName || 'Someone').join(', ')} upvoted`
+                      : `${upvoters.slice(0, 2).map(v => v.userName || 'Someone').join(', ')} and ${upvoters.length - 2} others upvoted`}
+                </Text>
+              </View>
+            )}
 
             {user && issue.status !== 'resolved' && (
               <TouchableOpacity
@@ -461,8 +513,15 @@ const styles = StyleSheet.create({
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.sm, marginBottom: SPACING.xl },
   locationText: { ...TYPOGRAPHY.body, fontSize: 13, flex: 1 },
 
-  upvoteBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md, justifyContent: 'center', marginBottom: SPACING.xl },
+  upvoteBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md, justifyContent: 'center', marginBottom: SPACING.sm },
   upvoteBtnText: { ...TYPOGRAPHY.body, fontSize: 15, fontWeight: '800' },
+  upvotersRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.xl, paddingHorizontal: SPACING.xs },
+  upvoterAvatars: { flexDirection: 'row', alignItems: 'center' },
+  upvoterAvatar: {},
+  upvoterImg: { width: 24, height: 24, borderRadius: 12, borderWidth: 2 },
+  upvoterImgPlaceholder: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  upvoterOverflowText: { fontSize: 9, fontWeight: '800' },
+  upvotersLabel: { ...TYPOGRAPHY.caption, fontSize: 12, flex: 1 },
   suggestResolveBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md, justifyContent: 'center', marginBottom: SPACING.xl },
   suggestResolveBtnText: { ...TYPOGRAPHY.body, fontSize: 15, fontWeight: '800' },
 
