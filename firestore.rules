@@ -25,7 +25,8 @@ service cloud.firestore {
     function isNotBanned() {
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
       // If user record doesn't exist yet (new signup), treat as not banned
-      return !('banType' in userDoc.data) ||
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        !('banType' in userDoc.data) ||
         userDoc.data.banType == 'none' ||
         // Temporary bans: bannedUntil is stored as a Timestamp; expired = not banned
         (userDoc.data.banType == 'temporary' && userDoc.data.bannedUntil is timestamp && userDoc.data.bannedUntil < request.time);
@@ -57,7 +58,9 @@ service cloud.firestore {
             && request.resource.data.createdBy == resource.data.createdBy
             && request.resource.data.status == resource.data.status)
         || (isAuthenticated() && isNotBanned()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvoteCount']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvoteCount'])
+            && (request.resource.data.upvoteCount == resource.data.upvoteCount + 1
+                || request.resource.data.upvoteCount == resource.data.upvoteCount - 1));
 
       allow delete: if isAdmin();
     }

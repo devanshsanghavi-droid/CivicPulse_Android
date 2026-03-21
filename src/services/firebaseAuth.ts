@@ -55,58 +55,9 @@ export const signInWithGoogle = async (): Promise<User> => {
     // Sign into Firebase with that credential
     const result = await signInWithCredential(auth, googleCredential);
     const firebaseUser = result.user;
-
     const email = firebaseUser.email || '';
-    const name = firebaseUser.displayName || email.split('@')[0] || 'User';
-    const photoURL = firebaseUser.photoURL || '';
-    const now = new Date().toISOString();
 
-    // Determine role
-    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
-    const role = isSuperAdmin ? 'super_admin' : 'resident';
-
-    // Create or update user in local storage
-    const user = await storageService.upsertUser({
-      id: firebaseUser.uid,
-      name,
-      email,
-      role,
-      photoURL,
-      createdAt: now,
-      lastLoginAt: now,
-      notifsEnabled: true,
-    });
-
-    // Log login + upsert user record in Firestore (same as web)
-    try {
-      await firestoreService.logLogin({
-        userId: user.id,
-        email,
-        name,
-        photoURL,
-        loginAt: now,
-        userAgent: 'CivicPulse iOS App'
-      });
-    } catch (e) {
-      console.warn('Failed to log login event:', e);
-    }
-
-    try {
-      await firestoreService.upsertUserRecord({
-        id: user.id,
-        email,
-        name,
-        photoURL,
-        role: user.role,
-        banType: 'none',
-        createdAt: now,
-        lastLoginAt: now
-      });
-    } catch (e) {
-      console.warn('Failed to upsert user record:', e);
-    }
-
-    return user;
+    return await buildUserFromFirebase(firebaseUser, email);
   } catch (error: any) {
     // Provide helpful error messages for common cases
     if (error.code === statusCodes.SIGN_IN_CANCELLED) {
@@ -188,13 +139,13 @@ const buildUserFromFirebase = async (firebaseUser: FirebaseUser, email: string):
   const now = new Date().toISOString();
   const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
 
-  // Fetch existing role from Firestore (preserves admin promotions)
-  let firestoreRole: UserRole | null = null;
+  // Fetch existing record from Firestore (preserves admin promotions + ban state)
+  let existingRecord: any = null;
   try {
-    const userDoc = await firestoreService.getUserRecord(firebaseUser.uid);
-    if (userDoc) firestoreRole = userDoc.role;
+    existingRecord = await firestoreService.getUserRecord(firebaseUser.uid);
   } catch { /* fall back to defaults */ }
 
+  const firestoreRole: UserRole | null = existingRecord?.role || null;
   const role: UserRole = firestoreRole || (isSuperAdmin ? 'super_admin' : 'resident');
 
   const user = await storageService.upsertUser({
@@ -208,7 +159,6 @@ const buildUserFromFirebase = async (firebaseUser: FirebaseUser, email: string):
 
   try {
     // Only set banType on first creation — don't overwrite existing bans
-    const existingRecord = await firestoreService.getUserRecord(user.id);
     const record: any = { id: user.id, email, name, photoURL, role: user.role, lastLoginAt: now };
     if (!existingRecord) {
       record.banType = 'none';

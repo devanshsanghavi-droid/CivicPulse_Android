@@ -155,8 +155,10 @@ export async function checkBanned(userId: string): Promise<void> {
     }
 
     if (banType === 'temporary') {
-      const bannedUntil = data.bannedUntil ? new Date(data.bannedUntil) : null;
-      if (bannedUntil && bannedUntil > new Date()) {
+      // bannedUntil may be a Firestore Timestamp or an ISO string
+      const raw = data.bannedUntil;
+      const bannedUntil = raw?.toDate ? raw.toDate() : (raw ? new Date(raw) : null);
+      if (bannedUntil && !isNaN(bannedUntil.getTime()) && bannedUntil > new Date()) {
         const reason = data.banReason
           ? `Your account is suspended until ${bannedUntil.toLocaleDateString()}. Reason: ${data.banReason}`
           : `Your account is suspended until ${bannedUntil.toLocaleDateString()}.`;

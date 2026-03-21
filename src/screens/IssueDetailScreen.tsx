@@ -59,7 +59,6 @@ export default function IssueDetailScreen() {
           firestoreService.getComments(issueId),
         ]);
         if (cancelled) return;
-        console.log('[IssueDetail] Full issue data:', JSON.stringify(issueData, null, 2));
         setIssue(issueData);
         setComments(commentsData);
         if (user) {

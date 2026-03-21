@@ -127,7 +127,11 @@ export default function AdminDashboardScreen() {
     if (!selectedUser) return;
     try {
       if (banPermanent) { await firestoreService.banUser(selectedUser.id, 'permanent', banReason); }
-      else { await firestoreService.banUser(selectedUser.id, 'temporary', banReason, banUnit === 'days' ? parseInt(banDuration) * 24 : parseInt(banDuration)); }
+      else {
+        const hours = parseInt(banDuration, 10);
+        if (isNaN(hours) || hours <= 0) { Alert.alert('Invalid Duration', 'Please enter a valid number.'); return; }
+        await firestoreService.banUser(selectedUser.id, 'temporary', banReason, banUnit === 'days' ? hours * 24 : hours);
+      }
       Alert.alert('User Banned', `${selectedUser.name} has been banned.`);
       setSelectedUser({ ...selectedUser, banType: banPermanent ? 'permanent' : 'temporary' }); loadData();
     } catch { Alert.alert('Error', 'Failed to ban user.'); }
@@ -146,12 +150,10 @@ export default function AdminDashboardScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Promote', onPress: async () => {
         try {
-          console.log(`[Admin] Promoting ${selectedUser.email} (${selectedUser.id}) to ${toRole}`);
           await firestoreService.setUserRole(selectedUser.id, toRole);
           setSelectedUser({ ...selectedUser, role: toRole });
           loadData();
         } catch (err: any) {
-          console.error('[Admin] Promote failed:', err);
           Alert.alert('Error', err.message || 'Failed to promote user.');
         }
       }}
@@ -164,12 +166,10 @@ export default function AdminDashboardScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Demote', style: 'destructive', onPress: async () => {
         try {
-          console.log(`[Admin] Demoting ${selectedUser.email} (${selectedUser.id}) to resident`);
           await firestoreService.setUserRole(selectedUser.id, 'resident');
           setSelectedUser({ ...selectedUser, role: 'resident' });
           loadData();
         } catch (err: any) {
-          console.error('[Admin] Demote failed:', err);
           Alert.alert('Error', err.message || 'Failed to demote user.');
         }
       }}
@@ -505,6 +505,7 @@ export default function AdminDashboardScreen() {
                     ))
                   }
 
+                  {/* Ban controls — hidden for super_admins (can't ban a super_admin) */}
                   {selectedUser.role !== 'super_admin' && (
                     <>
                       <Text style={[styles.modalSectionLabel, { color: theme.textMuted }]}>BAN CONTROLS</Text>
@@ -532,26 +533,28 @@ export default function AdminDashboardScreen() {
                           </TouchableOpacity>
                         </View>
                       )}
-                      {isSuperAdmin && (
-                        <View style={styles.promoteRow}>
-                          {(selectedUser.role === 'resident' || selectedUser.role === 'guest') && (
-                            <TouchableOpacity style={[styles.promoteBtn, { borderColor: theme.primary }]} onPress={() => handlePromote('admin')}>
-                              <Ionicons name="arrow-up-circle" size={16} color={theme.primary} /><Text style={[styles.promoteBtnText, { color: theme.primary }]}>Promote to Admin</Text>
-                            </TouchableOpacity>
-                          )}
-                          {selectedUser.role === 'admin' && (
-                            <TouchableOpacity style={[styles.promoteBtn, { borderColor: theme.success, marginBottom: SPACING.sm }]} onPress={() => handlePromote('super_admin')}>
-                              <Ionicons name="arrow-up-circle" size={16} color={theme.success} /><Text style={[styles.promoteBtnText, { color: theme.success }]}>Promote to Super Admin</Text>
-                            </TouchableOpacity>
-                          )}
-                          {(['admin', 'super_admin'] as string[]).includes(selectedUser.role) && (
-                            <TouchableOpacity style={[styles.demoteBtn, { borderColor: theme.warning }]} onPress={handleDemote}>
-                              <Ionicons name="arrow-down-circle" size={16} color={theme.warning} /><Text style={[styles.demoteBtnText, { color: theme.warning }]}>Demote to Resident</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      )}
                     </>
+                  )}
+
+                  {/* Role controls — always visible for super_admins viewing other users */}
+                  {isSuperAdmin && selectedUser.id !== user?.id && (
+                    <View style={styles.promoteRow}>
+                      {(selectedUser.role === 'resident' || selectedUser.role === 'guest') && (
+                        <TouchableOpacity style={[styles.promoteBtn, { borderColor: theme.primary, marginBottom: SPACING.sm }]} onPress={() => handlePromote('admin')}>
+                          <Ionicons name="arrow-up-circle" size={16} color={theme.primary} /><Text style={[styles.promoteBtnText, { color: theme.primary }]}>Promote to Admin</Text>
+                        </TouchableOpacity>
+                      )}
+                      {(selectedUser.role === 'resident' || selectedUser.role === 'guest' || selectedUser.role === 'admin') && (
+                        <TouchableOpacity style={[styles.promoteBtn, { borderColor: theme.success, marginBottom: SPACING.sm }]} onPress={() => handlePromote('super_admin')}>
+                          <Ionicons name="arrow-up-circle" size={16} color={theme.success} /><Text style={[styles.promoteBtnText, { color: theme.success }]}>Promote to Super Admin</Text>
+                        </TouchableOpacity>
+                      )}
+                      {(['admin', 'super_admin'] as string[]).includes(selectedUser.role) && (
+                        <TouchableOpacity style={[styles.demoteBtn, { borderColor: theme.warning }]} onPress={handleDemote}>
+                          <Ionicons name="arrow-down-circle" size={16} color={theme.warning} /><Text style={[styles.demoteBtnText, { color: theme.warning }]}>Demote to Resident</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   )}
                 </>
               )}

@@ -331,20 +331,14 @@ export const firestoreService = {
   // Replaces web's FileReader/base64 approach with React Native's blob upload
 
   uploadPhoto: async (localUri: string, issueId: string): Promise<string> => {
-    console.log('[uploadPhoto] URI:', localUri.substring(0, 100));
     validatePhotoUri(localUri);
-    console.log('[uploadPhoto] URI validated');
     const response = await fetch(localUri);
     const blob = await response.blob();
-    console.log('[uploadPhoto] Blob size:', blob.size, 'type:', blob.type);
     await validatePhotoBlob(blob);
-    console.log('[uploadPhoto] Blob validated');
     const filename = `issues/${issueId}/${Date.now()}.jpg`;
     const storageRef = ref(storage, filename);
     await uploadBytes(storageRef, blob);
-    console.log('[uploadPhoto] Uploaded to Storage');
     const url = await getDownloadURL(storageRef);
-    console.log('[uploadPhoto] Download URL:', url.substring(0, 80));
     return url;
   },
 
@@ -467,7 +461,9 @@ export const firestoreService = {
       for (const d of snapshot.docs) {
         const rec = { id: d.id, ...d.data() } as UserRecord;
         // Auto-unban expired temp bans
-        if (rec.banType === 'temporary' && rec.bannedUntil && new Date(rec.bannedUntil) <= now) {
+        const rawUntil = (rec as any).bannedUntil;
+        const parsedUntil = rawUntil?.toDate ? rawUntil.toDate() : (rawUntil ? new Date(rawUntil) : null);
+        if (rec.banType === 'temporary' && parsedUntil && !isNaN(parsedUntil.getTime()) && parsedUntil <= now) {
           await updateDoc(doc(db, 'users', rec.id), {
             banType: 'none', bannedAt: '', bannedUntil: '', banReason: ''
           });
@@ -512,8 +508,27 @@ export const firestoreService = {
   // --- Role management (super_admin only) ---
 
   setUserRole: async (userId: string, role: UserRole): Promise<void> => {
-    console.log(`[Firestore] setUserRole: ${userId} -> ${role}`);
+    // Update the primary doc
     await setDoc(doc(db, 'users', userId), { role }, { merge: true });
+
+    // Also update any other docs with the same email (dedup issue —
+    // admin may promote a doc that differs from the user's auth UID doc)
+    try {
+      const primaryDoc = await getDoc(doc(db, 'users', userId));
+      const email = primaryDoc.data()?.email;
+      if (email) {
+        const q = query(collection(db, 'users'), where('email', '==', email));
+        const snapshot = await getDocs(q);
+        const updates = snapshot.docs
+          .filter(d => d.id !== userId)
+          .map(d => setDoc(doc(db, 'users', d.id), { role }, { merge: true }));
+        if (updates.length > 0) {
+          await Promise.all(updates);
+        }
+      }
+    } catch (e) {
+      console.warn('[Firestore] setUserRole: failed to update duplicate docs:', e);
+    }
   },
 
   // --- Resolution Suggestions ---
