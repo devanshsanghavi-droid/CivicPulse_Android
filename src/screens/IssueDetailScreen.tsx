@@ -4,8 +4,11 @@ import {
   View, Text, StyleSheet, ScrollView, Image,
   TouchableOpacity, TextInput, ActivityIndicator,
   Alert, SafeAreaView, KeyboardAvoidingView, Platform,
-  Dimensions, NativeSyntheticEvent, NativeScrollEvent, Modal
+  Dimensions, NativeSyntheticEvent, NativeScrollEvent, Modal,
+  StatusBar
 } from 'react-native';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +51,8 @@ export default function IssueDetailScreen() {
   const [commenting, setCommenting] = useState(false);
   const [upvoting, setUpvoting] = useState(false);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+  const [savingPhoto, setSavingPhoto] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolveReason, setResolveReason] = useState('');
   const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
@@ -132,6 +137,20 @@ export default function IssueDetailScreen() {
     }
   };
 
+  const handleSavePhoto = async (url: string) => {
+    setSavingPhoto(true);
+    try {
+      const filename = `CivicPulse_${Date.now()}.jpg`;
+      const localUri = LegacyFileSystem.cacheDirectory + filename;
+      const { uri } = await LegacyFileSystem.downloadAsync(url, localUri);
+      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Save Photo' });
+    } catch {
+      Alert.alert('Error', 'Failed to save photo.');
+    } finally {
+      setSavingPhoto(false);
+    }
+  };
+
   const handleExpandMap = () => {
     if (!issue) return;
     navigation.navigate('Main', { screen: 'Map', params: { focusIssueId: issue.id, latitude: issue.latitude, longitude: issue.longitude } });
@@ -152,7 +171,9 @@ export default function IssueDetailScreen() {
             <View style={styles.photoContainer}>
               <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.photoScroll} onScroll={handlePhotoScroll} scrollEventThrottle={16}>
                 {issue.photos.map((photo) => (
-                  <Image key={photo.id} source={{ uri: photo.url }} style={styles.photo} resizeMode="cover" />
+                  <TouchableOpacity key={photo.id} activeOpacity={0.9} onPress={() => setFullscreenPhoto(photo.url)}>
+                    <Image source={{ uri: photo.url }} style={styles.photo} resizeMode="cover" />
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
               {issue.photos.length > 1 && (
@@ -306,6 +327,60 @@ export default function IssueDetailScreen() {
             <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
           </TouchableOpacity>
         )}
+        {/* Fullscreen Photo Viewer */}
+        <Modal visible={!!fullscreenPhoto} transparent animationType="fade" onRequestClose={() => setFullscreenPhoto(null)}>
+          <StatusBar barStyle="light-content" />
+          <View style={styles.photoViewerOverlay}>
+            {/* Close button */}
+            <TouchableOpacity style={styles.photoViewerClose} onPress={() => setFullscreenPhoto(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="close" size={28} color="#ffffff" />
+            </TouchableOpacity>
+
+            {/* Full image */}
+            <ScrollView
+              style={styles.photoViewerScroll}
+              contentContainerStyle={styles.photoViewerScrollContent}
+              maximumZoomScale={5}
+              minimumZoomScale={1}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              bouncesZoom
+            >
+              {fullscreenPhoto && (
+                <Image
+                  source={{ uri: fullscreenPhoto }}
+                  style={styles.photoViewerImage}
+                  resizeMode="contain"
+                />
+              )}
+            </ScrollView>
+
+            {/* Bottom bar with save + counter */}
+            <View style={styles.photoViewerBar}>
+              {issue && issue.photos.length > 1 && (
+                <Text style={styles.photoViewerCounter}>
+                  {(issue.photos.findIndex(p => p.url === fullscreenPhoto) + 1)} / {issue.photos.length}
+                </Text>
+              )}
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity
+                style={styles.photoViewerSaveBtn}
+                onPress={() => fullscreenPhoto && handleSavePhoto(fullscreenPhoto)}
+                disabled={savingPhoto}
+              >
+                {savingPhoto ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Ionicons name="download-outline" size={18} color="#ffffff" />
+                    <Text style={styles.photoViewerSaveText}>Save</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
         {/* Resolution Suggestion Modal */}
         <Modal visible={showResolveModal} transparent animationType="fade" onRequestClose={() => setShowResolveModal(false)}>
           <View style={styles.modalOverlay}>
@@ -431,6 +506,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
   },
+
+  // Fullscreen photo viewer
+  photoViewerOverlay: { flex: 1, backgroundColor: '#000000' },
+  photoViewerClose: { position: 'absolute', top: 54, right: 20, zIndex: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  photoViewerScroll: { flex: 1 },
+  photoViewerScrollContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  photoViewerImage: { width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.2 },
+  photoViewerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12 },
+  photoViewerCounter: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  photoViewerSaveBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 },
+  photoViewerSaveText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
 
   // Resolution suggestion modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
