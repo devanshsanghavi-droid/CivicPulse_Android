@@ -34,6 +34,7 @@ import {
   ResolutionSuggestion
 } from '../types';
 import { calculateTrendingScore, calculateTrendingScoreWithDistance, distanceMiles } from './storage';
+import { SUPER_ADMIN_EMAILS } from '../constants';
 import {
   checkRateLimit, checkBanned, checkDuplicate,
   sanitizeText, validatePhotoUri, validatePhotoBlob,
@@ -515,6 +516,16 @@ export const firestoreService = {
   },
 
   banUser: async (userId: string, banType: 'temporary' | 'permanent', reason?: string, durationHours?: number): Promise<void> => {
+    // Protect super_admin accounts from being banned
+    const targetDoc = await getDoc(doc(db, 'users', userId));
+    const targetData = targetDoc.data();
+    if (targetData?.role === 'super_admin') {
+      throw new Error('Super admins cannot be banned.');
+    }
+    const targetEmail = targetData?.email?.toLowerCase();
+    if (targetEmail && SUPER_ADMIN_EMAILS.includes(targetEmail)) {
+      throw new Error('This account cannot be banned.');
+    }
     if (banType === 'temporary' && (!durationHours || durationHours <= 0)) {
       throw new Error('Temporary bans require a duration greater than 0.');
     }
@@ -545,6 +556,16 @@ export const firestoreService = {
   // --- Role management (super_admin only) ---
 
   setUserRole: async (userId: string, role: UserRole): Promise<void> => {
+    // Protect super_admin accounts from role changes (unless promoting TO super_admin)
+    const targetDoc = await getDoc(doc(db, 'users', userId));
+    const targetData = targetDoc.data();
+    const targetEmail = targetData?.email?.toLowerCase();
+    if (targetData?.role === 'super_admin' && role !== 'super_admin') {
+      throw new Error('Super admin role cannot be changed.');
+    }
+    if (targetEmail && SUPER_ADMIN_EMAILS.includes(targetEmail) && role !== 'super_admin') {
+      throw new Error('This account\'s role cannot be changed.');
+    }
     // Update the primary doc
     await setDoc(doc(db, 'users', userId), { role }, { merge: true });
 

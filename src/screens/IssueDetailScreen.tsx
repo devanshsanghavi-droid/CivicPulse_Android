@@ -36,7 +36,7 @@ const STATUS_DARK: Record<string, { bg: string; text: string; marker: string }> 
 };
 
 export default function IssueDetailScreen() {
-  const { user, isDark, theme } = useApp();
+  const { user, isDark, theme, isBanned, banMessage } = useApp();
   const route = useRoute<RouteType>();
   const navigation = useNavigation<any>();
   const { issueId } = route.params;
@@ -85,9 +85,15 @@ export default function IssueDetailScreen() {
     return () => { cancelled = true; };
   }, [issueId]);
 
+  const canInteract = !!user && !isBanned;
+
   const handleUpvote = async () => {
     if (!user) {
       toastRef.current?.show('Sign in to upvote this report');
+      return;
+    }
+    if (isBanned) {
+      Alert.alert('Account Suspended', banMessage || 'Your account has been suspended.');
       return;
     }
     if (!issue || upvoting) return;
@@ -303,7 +309,7 @@ export default function IssueDetailScreen() {
               </View>
             )}
 
-            {user && issue.status !== 'resolved' && (
+            {canInteract && issue.status !== 'resolved' && (
               <TouchableOpacity
                 style={[styles.suggestResolveBtn, { borderColor: theme.success }]}
                 onPress={() => setShowResolveModal(true)}
@@ -339,7 +345,7 @@ export default function IssueDetailScreen() {
           </View>
         </ScrollView>
 
-        {user ? (
+        {canInteract ? (
           <View style={[styles.commentFooter, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
             <View style={styles.commentInputRow}>
               <TextInput
@@ -363,11 +369,14 @@ export default function IssueDetailScreen() {
         ) : (
           <TouchableOpacity
             style={[styles.guestCommentCta, { backgroundColor: theme.card, borderTopColor: theme.border }]}
-            onPress={() => toastRef.current?.show('Sign in to add a comment')}
+            onPress={() => isBanned
+              ? Alert.alert('Account Suspended', banMessage || 'Your account has been suspended.')
+              : toastRef.current?.show('Sign in to add a comment')
+            }
             activeOpacity={0.8}
           >
             <Ionicons name="lock-closed-outline" size={16} color={theme.textMuted} />
-            <Text style={[styles.guestCommentCtaText, { color: theme.textMuted }]}>Sign in to join the discussion</Text>
+            <Text style={[styles.guestCommentCtaText, { color: theme.textMuted }]}>{isBanned ? 'Your account is suspended' : 'Sign in to join the discussion'}</Text>
             <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
           </TouchableOpacity>
         )}

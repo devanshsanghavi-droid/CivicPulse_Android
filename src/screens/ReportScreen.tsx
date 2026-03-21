@@ -22,7 +22,7 @@ type LocationTab = 'gps' | 'address' | 'pin';
 const STEP_LABELS = ['Photos', 'Details', 'Location'];
 
 export default function ReportScreen() {
-  const { user, isDark, theme } = useApp();
+  const { user, isDark, theme, isBanned, banMessage } = useApp();
   const navigation = useNavigation();
   const [currentStep, setCurrentStep] = useState(1);
   const [title, setTitle] = useState('');
@@ -221,6 +221,18 @@ export default function ReportScreen() {
     </View>
   );
 
+  if (isBanned) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
+        <View style={styles.bannedContainer}>
+          <Ionicons name="ban" size={48} color={theme.error} />
+          <Text style={[styles.bannedTitle, { color: theme.textPrimary }]}>Account Suspended</Text>
+          <Text style={[styles.bannedMessage, { color: theme.textSecondary }]}>{banMessage || 'Your account has been suspended. You cannot submit reports during this time.'}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -281,6 +293,14 @@ export default function ReportScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                {categoryId === '8' && (
+                  <View style={[styles.safetyWarning, { backgroundColor: isDark ? '#4a1c1c' : '#fef2f2', borderColor: isDark ? '#7f1d1d' : '#fecaca' }]}>
+                    <Ionicons name="warning" size={16} color={isDark ? '#fca5a5' : '#dc2626'} />
+                    <Text style={[styles.safetyWarningText, { color: isDark ? '#fca5a5' : '#dc2626' }]}>
+                      If this is an emergency, please call 911 immediately. This app is not monitored in real-time.
+                    </Text>
+                  </View>
+                )}
               </View>
               <View style={styles.field}>
                 <Text style={[styles.label, { color: theme.textMuted }]}>DESCRIPTION (OPTIONAL)</Text>
@@ -407,6 +427,9 @@ export default function ReportScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { flex: 1 },
+  bannedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xxl, gap: SPACING.md },
+  bannedTitle: { ...TYPOGRAPHY.pageTitle, fontSize: 22 },
+  bannedMessage: { ...TYPOGRAPHY.body, textAlign: 'center', lineHeight: 22 },
   scroll: { padding: SPACING.lg, paddingBottom: 120 },
 
   stepIndicator: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingVertical: SPACING.lg, paddingHorizontal: SPACING.xxl, borderBottomWidth: 1 },
@@ -432,6 +455,8 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   categoryChip: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.round, borderWidth: 1 },
   categoryText: { ...TYPOGRAPHY.caption, fontWeight: '700' },
+  safetyWarning: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, marginTop: SPACING.md, padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1 },
+  safetyWarningText: { flex: 1, fontSize: 13, fontWeight: '700', lineHeight: 19 },
 
   locTabs: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg },
   locTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md, borderWidth: 1 },
