@@ -7,7 +7,6 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import * as MediaLibrary from 'expo-media-library';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, MapPressEvent } from 'react-native-maps';
 import { useApp } from '../context/AppContext';
@@ -63,37 +62,46 @@ export default function ReportScreen() {
     if (photos.length >= 3) { Alert.alert('Limit Reached', 'You can attach up to 3 photos.'); return; }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission Required', 'Please allow access to your photo library.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, quality: 0.8 });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      exif: true,
+    });
     if (!result.canceled && result.assets.length > 0) {
       const remaining = 3 - photos.length;
       const picked = result.assets.slice(0, remaining);
       setPhotos(prev => [...prev, ...picked.map(a => a.uri)]);
 
-      // Try to extract GPS from first photo with location data
+      // Try to extract GPS from EXIF of first photo with location data
       try {
-        const { status: mlStatus } = await MediaLibrary.requestPermissionsAsync();
-        if (mlStatus === 'granted') {
-          for (const asset of picked) {
-            const assetId = asset.assetId;
-            if (!assetId) continue;
-            const fullAsset = await MediaLibrary.getAssetInfoAsync(assetId);
-            if (fullAsset.location?.latitude && fullAsset.location?.longitude) {
-              const { latitude, longitude } = fullAsset.location;
-              setLocation({ latitude, longitude });
-              setPinLocation({ latitude, longitude });
-              setPhotoLocationNotice(true);
-              // Reverse geocode for address
-              try {
-                const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
-                if (geo[0]) {
-                  const g = geo[0];
-                  const addr = `${g.streetNumber || ''} ${g.street || ''}, ${g.city || ''}, ${g.region || ''}`.trim();
-                  setAddress(addr);
-                  setPinAddress(addr);
-                }
-              } catch { /* address lookup failed — coordinates are still set */ }
-              break; // use first photo with location
-            }
+        for (const asset of picked) {
+          const exif = asset.exif;
+          if (!exif) continue;
+          // EXIF GPS fields: GPSLatitude / GPSLongitude (numeric, from expo-image-picker)
+          const lat = exif.GPSLatitude as number | undefined;
+          const lon = exif.GPSLongitude as number | undefined;
+          if (lat && lon && lat !== 0 && lon !== 0) {
+            // Apply direction refs — S and W are negative
+            const latRef = (exif.GPSLatitudeRef as string) || 'N';
+            const lonRef = (exif.GPSLongitudeRef as string) || 'E';
+            const latitude = latRef === 'S' ? -Math.abs(lat) : Math.abs(lat);
+            const longitude = lonRef === 'W' ? -Math.abs(lon) : Math.abs(lon);
+
+            setLocation({ latitude, longitude });
+            setPinLocation({ latitude, longitude });
+            setPhotoLocationNotice(true);
+            // Reverse geocode for address
+            try {
+              const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
+              if (geo[0]) {
+                const g = geo[0];
+                const addr = `${g.streetNumber || ''} ${g.street || ''}, ${g.city || ''}, ${g.region || ''}`.trim();
+                setAddress(addr);
+                setPinAddress(addr);
+              }
+            } catch { /* address lookup failed — coordinates are still set */ }
+            break; // use first photo with location
           }
         }
       } catch { /* EXIF extraction failed — silent fallback */ }
