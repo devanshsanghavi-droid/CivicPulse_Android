@@ -55,6 +55,7 @@ export default function IssueDetailScreen() {
   const [resolveReason, setResolveReason] = useState('');
   const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
   const [upvoters, setUpvoters] = useState<{ userId: string; userName?: string; userPhotoURL?: string }[]>([]);
+  const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
   const toastRef = useRef<AuthPromptToastRef>(null);
 
   useEffect(() => {
@@ -70,8 +71,14 @@ export default function IssueDetailScreen() {
         setIssue(issueData);
         setComments(commentsData);
         if (user) {
-          const upvoted = await storageService.hasUpvoted(issueId, user.id);
-          if (!cancelled) setHasUpvoted(upvoted);
+          const [upvoted, liked] = await Promise.all([
+            storageService.hasUpvoted(issueId, user.id),
+            firestoreService.getCommentLikes(issueId, user.id),
+          ]);
+          if (!cancelled) {
+            setHasUpvoted(upvoted);
+            setLikedComments(liked);
+          }
           // Load upvoters if current user is the creator
           if (issueData && issueData.createdBy === user.id) {
             const voters = await firestoreService.getUpvoters(issueId);
@@ -114,6 +121,37 @@ export default function IssueDetailScreen() {
       }
     } catch { Alert.alert('Error', 'Failed to update upvote.'); }
     finally { setUpvoting(false); }
+  };
+
+  const handleCommentLike = async (commentId: string) => {
+    if (!user) {
+      toastRef.current?.show('Sign in to like comments');
+      return;
+    }
+    if (isBanned) {
+      Alert.alert('Account Suspended', banMessage || 'Your account has been suspended.');
+      return;
+    }
+    const isLiked = likedComments.has(commentId);
+    const isAdding = !isLiked;
+    // Optimistic update
+    setLikedComments(prev => {
+      const next = new Set(prev);
+      if (isAdding) next.add(commentId); else next.delete(commentId);
+      return next;
+    });
+    setComments(prev => prev.map(c => c.id === commentId ? { ...c, likeCount: c.likeCount + (isAdding ? 1 : -1) } : c));
+    try {
+      await firestoreService.toggleCommentLike(commentId, user.id, isAdding);
+    } catch {
+      // Revert on failure
+      setLikedComments(prev => {
+        const next = new Set(prev);
+        if (isAdding) next.delete(commentId); else next.add(commentId);
+        return next;
+      });
+      setComments(prev => prev.map(c => c.id === commentId ? { ...c, likeCount: c.likeCount + (isAdding ? -1 : 1) } : c));
+    }
   };
 
   const handleComment = async () => {
@@ -339,6 +377,23 @@ export default function IssueDetailScreen() {
                     <Text style={[styles.commentDate, { color: theme.textMuted }]}>{new Date(comment.createdAt).toLocaleDateString()}</Text>
                   </TouchableOpacity>
                   <Text style={[styles.commentBody, { color: theme.textSecondary }]}>{comment.body}</Text>
+                  <TouchableOpacity
+                    style={styles.commentLikeRow}
+                    onPress={() => handleCommentLike(comment.id)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons
+                      name={likedComments.has(comment.id) ? 'heart' : 'heart-outline'}
+                      size={14}
+                      color={likedComments.has(comment.id) ? '#ef4444' : theme.textMuted}
+                    />
+                    {comment.likeCount > 0 && (
+                      <Text style={[styles.commentLikeCount, { color: likedComments.has(comment.id) ? '#ef4444' : theme.textMuted }]}>
+                        {comment.likeCount}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
               ))
             )}
@@ -550,6 +605,8 @@ const styles = StyleSheet.create({
   commentAuthor: { ...TYPOGRAPHY.caption, fontWeight: '800', flex: 1 },
   commentDate: { ...TYPOGRAPHY.microLabel, fontWeight: '600' },
   commentBody: { ...TYPOGRAPHY.body, lineHeight: 21 },
+  commentLikeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: SPACING.sm, paddingTop: SPACING.xs },
+  commentLikeCount: { fontSize: 12, fontWeight: '700' },
 
   guestCommentCta: {
     flexDirection: 'row',

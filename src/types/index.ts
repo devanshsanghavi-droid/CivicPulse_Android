@@ -63,6 +63,7 @@ export interface Comment {
   hidden: boolean;
   deletedAt?: string;
   deletedByName?: string;
+  likeCount: number;
 }
 
 export interface Notification {

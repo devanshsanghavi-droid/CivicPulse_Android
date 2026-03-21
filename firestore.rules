@@ -76,9 +76,24 @@ service cloud.firestore {
 
       allow update: if isAdmin() ||
         (isOwner(resource.data.userId) && isNotBanned()
-          && validString(request.resource.data.body, 1000));
+          && validString(request.resource.data.body, 1000))
+        || (isAuthenticated() && isNotBanned()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+            && (request.resource.data.likeCount == resource.data.likeCount + 1
+                || request.resource.data.likeCount == resource.data.likeCount - 1));
 
       allow delete: if isAdmin();
+    }
+
+    // --- Comment Likes ---
+    match /commentLikes/{likeId} {
+      allow read: if true;
+
+      allow create: if isAuthenticated() && isNotBanned()
+        && request.resource.data.userId == request.auth.uid;
+
+      allow delete: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
     }
 
     // --- Upvotes ---

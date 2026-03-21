@@ -62,6 +62,7 @@ export const RATE_LIMITS = {
   createIssue:      { max: 5,  windowMs: 60 * 60 * 1000 },      // 5 per hour
   addComment:       { max: 20, windowMs: 60 * 60 * 1000 },      // 20 per hour
   toggleUpvote:     { max: 60, windowMs: 60 * 60 * 1000 },      // 60 per hour
+  toggleCommentLike:{ max: 60, windowMs: 60 * 60 * 1000 },      // 60 per hour
   submitSuggestion: { max: 10, windowMs: 60 * 60 * 1000 },      // 10 per hour
   submitReport:     { max: 10, windowMs: 60 * 60 * 1000 },      // 10 per hour
   addressSearch:    { max: 10, windowMs: 60 * 1000 },            // 10 per minute

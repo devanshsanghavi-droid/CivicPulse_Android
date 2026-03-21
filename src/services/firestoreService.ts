@@ -224,7 +224,10 @@ export const firestoreService = {
         where('hidden', '==', false)
       );
       const snapshot = await getDocs(q);
-      const comments = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Comment));
+      const comments = snapshot.docs.map(d => {
+        const data = d.data();
+        return { id: d.id, likeCount: 0, ...data } as Comment;
+      });
       return comments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch (error) {
       console.error('getComments error:', error);
@@ -250,10 +253,34 @@ export const firestoreService = {
       body: sanitizeText(body, LIMITS.COMMENT_BODY),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      hidden: false
+      hidden: false,
+      likeCount: 0
     };
     const docRef = await addDoc(collection(db, 'comments'), newComment);
     return { id: docRef.id, ...newComment };
+  },
+
+  toggleCommentLike: async (commentId: string, userId: string, isAdding: boolean): Promise<void> => {
+    await checkBanned(userId);
+    await checkRateLimit('toggleCommentLike', userId);
+
+    await updateDoc(doc(db, 'comments', commentId), {
+      likeCount: increment(isAdding ? 1 : -1)
+    });
+
+    const likeRef = doc(db, 'commentLikes', `${commentId}_${userId}`);
+    if (isAdding) {
+      await setDoc(likeRef, { commentId, userId });
+    } else {
+      await deleteDoc(likeRef);
+    }
+  },
+
+  getCommentLikes: async (issueId: string, userId: string): Promise<Set<string>> => {
+    // Get all comments for this issue, then check which ones this user liked
+    const q = query(collection(db, 'commentLikes'), where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    return new Set(snapshot.docs.map(d => d.data().commentId));
   },
 
   deleteComment: async (id: string, adminName: string): Promise<void> => {
@@ -421,7 +448,7 @@ export const firestoreService = {
       const q = query(collection(db, 'comments'), where('userId', '==', userId));
       const snapshot = await getDocs(q);
       return snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() } as Comment))
+        .map(d => ({ id: d.id, likeCount: 0, ...d.data() } as Comment))
         .filter(c => !c.hidden)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch {
