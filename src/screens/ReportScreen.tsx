@@ -141,17 +141,23 @@ export default function ReportScreen() {
         address: getEffectiveAddress(), photos: [],
       });
       if (photos.length > 0) {
+        console.log('[Report] Uploading', photos.length, 'photos for issue', issue.id);
+        console.log('[Report] Photo URIs:', photos);
         const uploadedPhotos = await Promise.all(
-          photos.map(async (uri, i) => ({
-            id: `photo_${i}`,
-            url: await firestoreService.uploadPhoto(uri, issue.id),
-          }))
+          photos.map(async (uri, i) => {
+            console.log(`[Report] Uploading photo ${i}:`, uri.substring(0, 80));
+            const url = await firestoreService.uploadPhoto(uri, issue.id);
+            console.log(`[Report] Photo ${i} uploaded, URL:`, url.substring(0, 80));
+            return { id: `photo_${i}`, url };
+          })
         );
+        console.log('[Report] All photos uploaded, updating Firestore doc...');
         await firestoreService.updateIssuePhotos(issue.id, uploadedPhotos);
+        console.log('[Report] Firestore doc updated with photos:', uploadedPhotos.length);
       }
       Alert.alert('Report Submitted! ✅', 'Your issue has been reported.', [{ text: 'View Feed', onPress: () => navigation.goBack() }]);
       setTitle(''); setDescription(''); setCategoryId(''); setPhotos([]); setCurrentStep(1);
-    } catch (err: any) { Alert.alert('Submission Failed', err.message || 'Please try again.'); }
+    } catch (err: any) { console.error('[Report] Submission error:', err); Alert.alert('Submission Failed', err.message || 'Please try again.'); }
     finally { setSubmitting(false); }
   };
 

@@ -324,14 +324,21 @@ export const firestoreService = {
   // Replaces web's FileReader/base64 approach with React Native's blob upload
 
   uploadPhoto: async (localUri: string, issueId: string): Promise<string> => {
+    console.log('[uploadPhoto] URI:', localUri.substring(0, 100));
     validatePhotoUri(localUri);
+    console.log('[uploadPhoto] URI validated');
     const response = await fetch(localUri);
     const blob = await response.blob();
+    console.log('[uploadPhoto] Blob size:', blob.size, 'type:', blob.type);
     await validatePhotoBlob(blob);
+    console.log('[uploadPhoto] Blob validated');
     const filename = `issues/${issueId}/${Date.now()}.jpg`;
     const storageRef = ref(storage, filename);
     await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
+    console.log('[uploadPhoto] Uploaded to Storage');
+    const url = await getDownloadURL(storageRef);
+    console.log('[uploadPhoto] Download URL:', url.substring(0, 80));
+    return url;
   },
 
   // --- Reports ---

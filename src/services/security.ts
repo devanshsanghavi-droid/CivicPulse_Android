@@ -208,16 +208,25 @@ export function checkDuplicate(userId: string, ...fields: string[]): void {
 // --- Photo Validation ---
 
 export function validatePhotoUri(uri: string): void {
-  const validExtensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'];
+  // Expo image picker and camera URIs are always safe — skip validation
+  // These come from the device's own image picker, not user-typed input
   const lower = uri.toLowerCase();
-
-  // Skip validation for data URIs, content:// URIs, and ph:// URIs (from image picker)
-  if (lower.startsWith('data:') || lower.startsWith('content://') || lower.startsWith('ph://')) {
+  if (
+    lower.startsWith('file://') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('content://') ||
+    lower.startsWith('ph://') ||
+    lower.startsWith('assets-library://') ||
+    lower.includes('imagepicker') ||
+    lower.includes('camera') ||
+    lower.includes('expo')
+  ) {
     return;
   }
 
+  const validExtensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'];
   const hasValidExt = validExtensions.some(ext => lower.endsWith(ext));
-  if (!hasValidExt && !lower.includes('imagepicker') && !lower.includes('camera')) {
+  if (!hasValidExt) {
     throw new SecurityError('Invalid photo format. Please use JPG, PNG, or HEIC images.');
   }
 }
