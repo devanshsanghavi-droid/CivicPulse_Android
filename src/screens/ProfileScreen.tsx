@@ -17,13 +17,10 @@ import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSys
 
 type Nav = StackNavigationProp<RootStackParamList>;
 
-const NEIGHBORHOODS = ['Downtown', 'Highlands', 'Westside', 'Lakeshore', 'Old Town', 'Creekview'];
-
 export default function ProfileScreen() {
   const { user, setUser, isDark, toggleDarkMode, theme } = useApp();
   const navigation = useNavigation<Nav>();
   const [stats, setStats] = useState({ reportCount: 0, upvoteCount: 0 });
-  const [showNeighborhoods, setShowNeighborhoods] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -67,12 +64,6 @@ export default function ProfileScreen() {
     if (updated) await setUser(updated);
   };
 
-  const selectNeighborhood = async (n: string) => {
-    const updated = await storageService.updateProfile(user.id, { neighborhood: n });
-    if (updated) await setUser(updated);
-    setShowNeighborhoods(false);
-  };
-
   const reportProblem = () => {
     Linking.openURL('mailto:civicpulsehelpdesk@gmail.com?subject=CivicPulse Support Request&body=Hi CivicPulse Team,%0D%0A%0D%0AI\'d like to report an issue:');
   };
@@ -97,11 +88,6 @@ export default function ProfileScreen() {
               <View style={[styles.roleTag, { backgroundColor: theme.primaryLight }]}>
                 <Text style={[styles.roleTagText, { color: theme.primary }]}>{user.role.toUpperCase()}</Text>
               </View>
-              {user.neighborhood && (
-                <View style={styles.neighborhoodTag}>
-                  <Text style={styles.neighborhoodTagText}>{user.neighborhood.toUpperCase()}</Text>
-                </View>
-              )}
             </View>
           </View>
         </View>
@@ -146,34 +132,6 @@ export default function ProfileScreen() {
             />
           </View>
         </TouchableOpacity>
-
-        {/* Neighborhood */}
-        <TouchableOpacity style={[styles.settingRow, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => setShowNeighborhoods(!showNeighborhoods)}>
-          <View style={styles.settingLeft}>
-            <Ionicons name="home-outline" size={20} color={theme.textMuted} />
-            <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>Neighborhood Registry</Text>
-          </View>
-          <View style={styles.settingRight}>
-            <Text style={[styles.settingValue, { color: theme.primary }]}>{user.neighborhood || 'Select'}</Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-          </View>
-        </TouchableOpacity>
-
-        {showNeighborhoods && (
-          <View style={[styles.neighborhoodGrid, { backgroundColor: theme.primaryLight }]}>
-            {NEIGHBORHOODS.map(n => (
-              <TouchableOpacity
-                key={n}
-                style={[styles.neighborhoodChip, { backgroundColor: theme.card, borderColor: theme.border }, user.neighborhood === n && { backgroundColor: theme.primary, borderColor: theme.primary }]}
-                onPress={() => selectNeighborhood(n)}
-              >
-                <Text style={[styles.neighborhoodChipText, { color: theme.textSecondary }, user.neighborhood === n && { color: '#ffffff' }]}>
-                  {n}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
 
         {/* Report a Problem */}
         <TouchableOpacity style={[styles.settingRow, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={reportProblem}>
@@ -229,9 +187,6 @@ const styles = StyleSheet.create({
   tagRow: { flexDirection: 'row', gap: SPACING.sm },
   roleTag: { borderRadius: BORDER_RADIUS.round, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs },
   roleTagText: { ...TYPOGRAPHY.microLabel, letterSpacing: 1 },
-  neighborhoodTag: { backgroundColor: '#dcfce7', borderRadius: BORDER_RADIUS.round, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs },
-  neighborhoodTagText: { ...TYPOGRAPHY.microLabel, color: '#16a34a', letterSpacing: 1 },
-
   sectionLabel: { ...TYPOGRAPHY.sectionLabel, marginBottom: SPACING.md, marginTop: SPACING.lg },
 
   statsGrid: { flexDirection: 'row', gap: SPACING.md, marginBottom: SPACING.xl },
@@ -252,16 +207,6 @@ const styles = StyleSheet.create({
   settingLabel: { ...TYPOGRAPHY.body, fontWeight: '700' },
   settingRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   settingValue: { ...TYPOGRAPHY.caption, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
-
-  neighborhoodGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm,
-    borderRadius: BORDER_RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.sm,
-  },
-  neighborhoodChip: {
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md, borderWidth: 1,
-  },
-  neighborhoodChipText: { ...TYPOGRAPHY.caption, fontWeight: '700' },
 
   logoutBtn: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
