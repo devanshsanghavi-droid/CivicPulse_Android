@@ -56,6 +56,7 @@ export default function IssueDetailScreen() {
   const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
   const [upvoters, setUpvoters] = useState<{ userId: string; userName?: string; userPhotoURL?: string }[]>([]);
   const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
+  const likingRef = useRef<Set<string>>(new Set());
   const toastRef = useRef<AuthPromptToastRef>(null);
 
   useEffect(() => {
@@ -71,18 +72,19 @@ export default function IssueDetailScreen() {
         setIssue(issueData);
         setComments(commentsData);
         if (user) {
-          const [upvoted, liked] = await Promise.all([
-            storageService.hasUpvoted(issueId, user.id),
-            firestoreService.getCommentLikes(issueId, user.id),
-          ]);
-          if (!cancelled) {
-            setHasUpvoted(upvoted);
-            setLikedComments(liked);
-          }
+          const upvoted = await storageService.hasUpvoted(issueId, user.id);
+          if (!cancelled) setHasUpvoted(upvoted);
+          // Load comment likes — fail gracefully if rules not deployed yet
+          try {
+            const liked = await firestoreService.getCommentLikes(issueId, user.id);
+            if (!cancelled) setLikedComments(liked);
+          } catch { /* commentLikes collection may not have rules yet */ }
           // Load upvoters if current user is the creator
           if (issueData && issueData.createdBy === user.id) {
-            const voters = await firestoreService.getUpvoters(issueId);
-            if (!cancelled) setUpvoters(voters);
+            try {
+              const voters = await firestoreService.getUpvoters(issueId);
+              if (!cancelled) setUpvoters(voters);
+            } catch { /* upvoters query may fail — non-critical */ }
           }
         }
       } catch (err) { console.error('IssueDetail load error:', err); }
@@ -132,6 +134,10 @@ export default function IssueDetailScreen() {
       Alert.alert('Account Suspended', banMessage || 'Your account has been suspended.');
       return;
     }
+    // Prevent double-tap while async is in-flight
+    if (likingRef.current.has(commentId)) return;
+    likingRef.current.add(commentId);
+
     const isLiked = likedComments.has(commentId);
     const isAdding = !isLiked;
     // Optimistic update
@@ -151,6 +157,8 @@ export default function IssueDetailScreen() {
         return next;
       });
       setComments(prev => prev.map(c => c.id === commentId ? { ...c, likeCount: c.likeCount + (isAdding ? -1 : 1) } : c));
+    } finally {
+      likingRef.current.delete(commentId);
     }
   };
 
@@ -294,20 +302,33 @@ export default function IssueDetailScreen() {
               </View>
             )}
 
-            <TouchableOpacity
-              style={[styles.upvoteBtn, { borderColor: theme.primary }, hasUpvoted && { backgroundColor: theme.primary }, !(user && issue.createdBy === user.id && upvoters.length > 0) && { marginBottom: SPACING.xl }]}
-              onPress={handleUpvote} disabled={upvoting} activeOpacity={0.8}>
-              {upvoting ? (
-                <ActivityIndicator size="small" color={hasUpvoted ? '#ffffff' : theme.primary} />
-              ) : (
-                <>
-                  <Ionicons name={hasUpvoted ? "thumbs-up" : "thumbs-up-outline"} size={18} color={hasUpvoted ? '#ffffff' : theme.primary} />
-                  <Text style={[styles.upvoteBtnText, { color: theme.primary }, hasUpvoted && { color: '#ffffff' }]}>
-                    {issue.upvoteCount} {issue.upvoteCount === 1 ? 'Upvote' : 'Upvotes'}
-                  </Text>
-                </>
+            {/* Upvote + Suggest Resolved — compact row */}
+            <View style={[styles.actionRow, { marginBottom: (user && issue.createdBy === user.id && upvoters.length > 0) ? SPACING.sm : SPACING.xl }]}>
+              <TouchableOpacity
+                style={[styles.actionBtn, { borderColor: theme.primary }, hasUpvoted && { backgroundColor: theme.primary }]}
+                onPress={handleUpvote} disabled={upvoting} activeOpacity={0.8}>
+                {upvoting ? (
+                  <ActivityIndicator size="small" color={hasUpvoted ? '#ffffff' : theme.primary} />
+                ) : (
+                  <>
+                    <Ionicons name={hasUpvoted ? "thumbs-up" : "thumbs-up-outline"} size={16} color={hasUpvoted ? '#ffffff' : theme.primary} />
+                    <Text style={[styles.actionBtnText, { color: theme.primary }, hasUpvoted && { color: '#ffffff' }]}>
+                      {issue.upvoteCount} {issue.upvoteCount === 1 ? 'Upvote' : 'Upvotes'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {canInteract && issue.status !== 'resolved' && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, { borderColor: theme.success }]}
+                  onPress={() => setShowResolveModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={16} color={theme.success} />
+                  <Text style={[styles.actionBtnText, { color: theme.success }]}>Resolved?</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </View>
 
             {/* Upvoter avatars — visible to issue creator */}
             {user && issue.createdBy === user.id && upvoters.length > 0 && (
@@ -345,17 +366,6 @@ export default function IssueDetailScreen() {
                       : `${upvoters.slice(0, 2).map(v => v.userName || 'Someone').join(', ')} and ${upvoters.length - 2} others upvoted`}
                 </Text>
               </View>
-            )}
-
-            {canInteract && issue.status !== 'resolved' && (
-              <TouchableOpacity
-                style={[styles.suggestResolveBtn, { borderColor: theme.success }]}
-                onPress={() => setShowResolveModal(true)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark-circle-outline" size={18} color={theme.success} />
-                <Text style={[styles.suggestResolveBtnText, { color: theme.success }]}>Suggest as Resolved</Text>
-              </TouchableOpacity>
             )}
 
             <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>COMMUNITY DISCUSSION</Text>
@@ -577,8 +587,9 @@ const styles = StyleSheet.create({
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.sm, marginBottom: SPACING.xl },
   locationText: { ...TYPOGRAPHY.body, fontSize: 13, flex: 1 },
 
-  upvoteBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md, justifyContent: 'center', marginBottom: SPACING.sm },
-  upvoteBtnText: { ...TYPOGRAPHY.body, fontSize: 15, fontWeight: '800' },
+  actionRow: { flexDirection: 'row', gap: SPACING.sm },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.sm, justifyContent: 'center' },
+  actionBtnText: { ...TYPOGRAPHY.body, fontSize: 13, fontWeight: '800' },
   upvotersRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.xl, paddingHorizontal: SPACING.xs },
   upvoterAvatars: { flexDirection: 'row', alignItems: 'center' },
   upvoterAvatar: {},
@@ -586,9 +597,6 @@ const styles = StyleSheet.create({
   upvoterImgPlaceholder: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   upvoterOverflowText: { fontSize: 9, fontWeight: '800' },
   upvotersLabel: { ...TYPOGRAPHY.caption, fontSize: 12, flex: 1 },
-  suggestResolveBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderWidth: 2, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md, justifyContent: 'center', marginBottom: SPACING.xl },
-  suggestResolveBtnText: { ...TYPOGRAPHY.body, fontSize: 15, fontWeight: '800' },
-
   sectionLabel: { ...TYPOGRAPHY.sectionLabel, marginBottom: SPACING.md },
 
   commentFooter: { borderTopWidth: 1, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
