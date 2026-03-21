@@ -53,8 +53,8 @@ export const distanceMiles = (
 
 /**
  * Trending score weighted by distance.
- * - Within 5 mi: full score
- * - 5–25 mi: linear decay to 30% of score
+ * - Within 8 mi: full score
+ * - 8–25 mi: linear decay to 30% of score
  * - 25–50 mi: linear decay to 5% of score
  * - Beyond 50 mi: 2% of score (nearly invisible)
  */
@@ -69,8 +69,8 @@ export const calculateTrendingScoreWithDistance = (
   }
   const dist = distanceMiles(userLat, userLon, issue.latitude, issue.longitude);
   let multiplier: number;
-  if (dist <= 5) multiplier = 1.0;
-  else if (dist <= 25) multiplier = 1.0 - 0.7 * ((dist - 5) / 20);   // 1.0 → 0.3
+  if (dist <= 8) multiplier = 1.0;
+  else if (dist <= 25) multiplier = 1.0 - 0.7 * ((dist - 8) / 17);   // 1.0 → 0.3
   else if (dist <= 50) multiplier = 0.3 - 0.25 * ((dist - 25) / 25);  // 0.3 → 0.05
   else multiplier = 0.02;
   return base * multiplier;
