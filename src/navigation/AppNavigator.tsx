@@ -22,6 +22,7 @@ import IssueDetailScreen from '../screens/IssueDetailScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import LoginScreen from '../screens/LoginScreen';
 import LocationExplanationScreen from '../screens/LocationExplanationScreen';
+import UserProfileScreen from '../screens/UserProfileScreen';
 
 // Type definitions for navigation
 export type RootStackParamList = {
@@ -29,6 +30,7 @@ export type RootStackParamList = {
   Main: { screen?: 'Feed' | 'Map' | 'Report' | 'Profile' | 'Admin' };
   Login: undefined;
   IssueDetail: { issueId: string };
+  UserProfile: { userId: string };
   LocationExplanation: { pendingScreen: 'Map' | 'Report' };
 };
 
@@ -134,10 +136,23 @@ function useIssueDetailOptions() {
   };
 }
 
+function useUserProfileOptions() {
+  const { theme } = useApp();
+  return {
+    headerShown: true,
+    headerTitle: 'Profile',
+    headerBackTitle: 'Back',
+    headerTintColor: theme.primary,
+    headerStyle: { backgroundColor: theme.background },
+    headerTitleStyle: { fontWeight: '800' as const, fontSize: 16, color: theme.textPrimary },
+  };
+}
+
 // Root Navigator
 export default function AppNavigator() {
   const { user, isAuthLoading } = useApp();
   const issueDetailOptions = useIssueDetailOptions();
+  const userProfileOptions = useUserProfileOptions();
 
   if (isAuthLoading) return <LoadingScreen />;
 
@@ -155,6 +170,11 @@ export default function AppNavigator() {
           name="IssueDetail"
           component={IssueDetailScreen}
           options={issueDetailOptions}
+        />
+        <Stack.Screen
+          name="UserProfile"
+          component={UserProfileScreen}
+          options={userProfileOptions}
         />
         <Stack.Screen
           name="LocationExplanation"

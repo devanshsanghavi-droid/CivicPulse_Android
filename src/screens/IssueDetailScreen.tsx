@@ -7,6 +7,7 @@ import {
   Dimensions, NativeSyntheticEvent, NativeScrollEvent
 } from 'react-native';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
 import { firestoreService } from '../services/firestoreService';
@@ -155,7 +156,7 @@ export default function IssueDetailScreen() {
               </View>
             )}
 
-            <View style={styles.reporterRow}>
+            <TouchableOpacity style={styles.reporterRow} onPress={() => navigation.navigate('UserProfile', { userId: issue.createdBy })} activeOpacity={0.7}>
               {issue.creatorPhotoURL ? (
                 <Image source={{ uri: issue.creatorPhotoURL }} style={styles.reporterAvatar} />
               ) : (
@@ -163,11 +164,11 @@ export default function IssueDetailScreen() {
                   <Ionicons name="person" size={14} color={theme.textMuted} />
                 </View>
               )}
-              <Text style={[styles.reporterName, { color: theme.textSecondary }]}>{issue.creatorName}</Text>
+              <Text style={[styles.reporterName, { color: theme.primary }]}>{issue.creatorName}</Text>
               <Text style={[styles.reporterDate, { color: theme.textMuted }]}>
                 {new Date(issue.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
               </Text>
-            </View>
+            </TouchableOpacity>
 
             {issue.latitude != null && issue.longitude != null && (
               <View style={styles.mapSection}>
@@ -255,7 +256,7 @@ export default function IssueDetailScreen() {
             ) : (
               comments.map(comment => (
                 <View key={comment.id} style={[styles.commentCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <View style={styles.commentHeader}>
+                  <TouchableOpacity style={styles.commentHeader} onPress={() => navigation.navigate('UserProfile', { userId: comment.userId })} activeOpacity={0.7}>
                     {comment.userPhotoURL ? (
                       <Image source={{ uri: comment.userPhotoURL }} style={styles.commentAvatar} />
                     ) : (
@@ -263,9 +264,9 @@ export default function IssueDetailScreen() {
                         <Ionicons name="person" size={12} color={theme.textMuted} />
                       </View>
                     )}
-                    <Text style={[styles.commentAuthor, { color: theme.textSecondary }]}>{comment.userName}</Text>
+                    <Text style={[styles.commentAuthor, { color: theme.primary }]}>{comment.userName}</Text>
                     <Text style={[styles.commentDate, { color: theme.textMuted }]}>{new Date(comment.createdAt).toLocaleDateString()}</Text>
-                  </View>
+                  </TouchableOpacity>
                   <Text style={[styles.commentBody, { color: theme.textSecondary }]}>{comment.body}</Text>
                 </View>
               ))

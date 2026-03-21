@@ -42,7 +42,7 @@ const StatusBadge = ({ status, isDark }: { status: string; isDark: boolean }) =>
   );
 };
 
-const IssueCard = ({ issue, onPress, theme, isDark, distance }: { issue: Issue; onPress: () => void; theme: AppTheme; isDark: boolean; distance?: string }) => {
+const IssueCard = ({ issue, onPress, onAuthorPress, theme, isDark, distance }: { issue: Issue; onPress: () => void; onAuthorPress: () => void; theme: AppTheme; isDark: boolean; distance?: string }) => {
   const category = CATEGORIES.find(c => c.id === issue.categoryId);
   const photo = issue.photos?.[0]?.url;
 
@@ -74,7 +74,7 @@ const IssueCard = ({ issue, onPress, theme, isDark, distance }: { issue: Issue; 
         <Text style={[styles.cardDesc, { color: theme.textSecondary }]} numberOfLines={2}>{issue.description || 'No description available'}</Text>
 
         <View style={[styles.cardFooter, { borderTopColor: theme.border }]}>
-          <View style={styles.cardAuthor}>
+          <TouchableOpacity style={styles.cardAuthor} onPress={onAuthorPress} activeOpacity={0.7}>
             {issue.creatorPhotoURL ? (
               <Image source={{ uri: issue.creatorPhotoURL }} style={[styles.avatar, { borderColor: theme.border }]} />
             ) : (
@@ -82,8 +82,8 @@ const IssueCard = ({ issue, onPress, theme, isDark, distance }: { issue: Issue; 
                 <Ionicons name="person" size={12} color={theme.textMuted} />
               </View>
             )}
-            <Text style={[styles.authorName, { color: theme.textSecondary }]} numberOfLines={1}>{issue.creatorName}</Text>
-          </View>
+            <Text style={[styles.authorName, { color: theme.primary }]} numberOfLines={1}>{issue.creatorName}</Text>
+          </TouchableOpacity>
           <View style={styles.upvoteRow}>
             <Ionicons name="thumbs-up" size={14} color={theme.primary} />
             <Text style={[styles.upvoteCount, { color: theme.textPrimary }]}>{issue.upvoteCount}</Text>
@@ -288,6 +288,7 @@ export default function FeedScreen() {
                   isDark={isDark}
                   distance={dist}
                   onPress={() => navigation.navigate('IssueDetail', { issueId: item.id })}
+                  onAuthorPress={() => navigation.navigate('UserProfile', { userId: item.createdBy })}
                 />
               );
             }}
