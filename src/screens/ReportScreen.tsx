@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import * as MediaLibrary from 'expo-media-library';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, MapPressEvent } from 'react-native-maps';
 import { useApp } from '../context/AppContext';
@@ -41,6 +42,7 @@ export default function ReportScreen() {
   const [pinAddress, setPinAddress] = useState('');
   const [addressResult, setAddressResult] = useState<{ lat: number; lng: number; display: string } | null>(null);
   const [expandedMap, setExpandedMap] = useState<'gps' | 'address' | null>(null);
+  const [photoLocationNotice, setPhotoLocationNotice] = useState(false);
 
   useEffect(() => { getLocation(); }, []);
 
@@ -64,7 +66,37 @@ export default function ReportScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, quality: 0.8 });
     if (!result.canceled && result.assets.length > 0) {
       const remaining = 3 - photos.length;
-      setPhotos(prev => [...prev, ...result.assets.slice(0, remaining).map(a => a.uri)]);
+      const picked = result.assets.slice(0, remaining);
+      setPhotos(prev => [...prev, ...picked.map(a => a.uri)]);
+
+      // Try to extract GPS from first photo with location data
+      try {
+        const { status: mlStatus } = await MediaLibrary.requestPermissionsAsync();
+        if (mlStatus === 'granted') {
+          for (const asset of picked) {
+            const assetId = asset.assetId;
+            if (!assetId) continue;
+            const fullAsset = await MediaLibrary.getAssetInfoAsync(assetId);
+            if (fullAsset.location?.latitude && fullAsset.location?.longitude) {
+              const { latitude, longitude } = fullAsset.location;
+              setLocation({ latitude, longitude });
+              setPinLocation({ latitude, longitude });
+              setPhotoLocationNotice(true);
+              // Reverse geocode for address
+              try {
+                const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
+                if (geo[0]) {
+                  const g = geo[0];
+                  const addr = `${g.streetNumber || ''} ${g.street || ''}, ${g.city || ''}, ${g.region || ''}`.trim();
+                  setAddress(addr);
+                  setPinAddress(addr);
+                }
+              } catch { /* address lookup failed — coordinates are still set */ }
+              break; // use first photo with location
+            }
+          }
+        }
+      } catch { /* EXIF extraction failed — silent fallback */ }
     }
   };
 
@@ -151,7 +183,7 @@ export default function ReportScreen() {
         await firestoreService.updateIssuePhotos(issue.id, uploadedPhotos);
       }
       Alert.alert('Report Submitted! ✅', 'Your issue has been reported.', [{ text: 'View Feed', onPress: () => navigation.goBack() }]);
-      setTitle(''); setDescription(''); setCategoryId(''); setPhotos([]); setCurrentStep(1);
+      setTitle(''); setDescription(''); setCategoryId(''); setPhotos([]); setCurrentStep(1); setPhotoLocationNotice(false);
     } catch (err: any) { console.error('[Report] Submission error:', err); Alert.alert('Submission Failed', err.message || 'Please try again.'); }
     finally { setSubmitting(false); }
   };
@@ -212,6 +244,15 @@ export default function ReportScreen() {
                   </>
                 )}
               </View>
+              {photoLocationNotice && (
+                <View style={[styles.photoLocNotice, { backgroundColor: isDark ? '#1a3a2a' : '#ecfdf5', borderColor: isDark ? '#2d5a3d' : '#a7f3d0' }]}>
+                  <Ionicons name="location" size={14} color={isDark ? '#86efac' : '#059669'} />
+                  <Text style={[styles.photoLocNoticeText, { color: isDark ? '#86efac' : '#059669' }]}>Location set from photo</Text>
+                  <TouchableOpacity onPress={() => setPhotoLocationNotice(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="close" size={14} color={isDark ? '#86efac' : '#059669'} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
 
@@ -407,6 +448,8 @@ const styles = StyleSheet.create({
   photoRemove: { position: 'absolute', top: -6, right: -6 },
   photoAddBtn: { width: '48%', height: 120, borderRadius: BORDER_RADIUS.md, borderWidth: 2, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, aspectRatio: 1 },
   photoAddText: { ...TYPOGRAPHY.caption, fontWeight: '700' },
+  photoLocNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: SPACING.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md, borderWidth: 1 },
+  photoLocNoticeText: { flex: 1, fontSize: 13, fontWeight: '600' },
 
   navigationButtons: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', padding: SPACING.lg, borderTopWidth: 1, gap: SPACING.sm },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, borderWidth: 1 },
