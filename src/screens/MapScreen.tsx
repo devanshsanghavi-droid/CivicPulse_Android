@@ -89,12 +89,13 @@ export default function MapScreen() {
   const [displayedMarkers, setDisplayedMarkers] = useState<ClusterOrPoint[]>([]);
 
   // Build supercluster index whenever issues change
+  // Clustering is very conservative — only kicks in when zoomed far out
   const clusterIndex = useMemo(() => {
     const index = new SuperCluster({
-      radius: 50,
-      maxZoom: 20,
+      radius: 30,
+      maxZoom: 8,
       minZoom: 1,
-      minPoints: 2,
+      minPoints: 3,
       extent: 512,
       nodeSize: 64,
     });
