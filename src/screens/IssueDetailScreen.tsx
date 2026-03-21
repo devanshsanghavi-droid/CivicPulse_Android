@@ -5,10 +5,8 @@ import {
   TouchableOpacity, TextInput, ActivityIndicator,
   Alert, SafeAreaView, KeyboardAvoidingView, Platform,
   Dimensions, NativeSyntheticEvent, NativeScrollEvent, Modal,
-  StatusBar
+  StatusBar, Share
 } from 'react-native';
-import * as LegacyFileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -140,15 +138,9 @@ export default function IssueDetailScreen() {
   const handleSavePhoto = async (url: string) => {
     setSavingPhoto(true);
     try {
-      const filename = `CivicPulse_${Date.now()}.jpg`;
-      const localUri = LegacyFileSystem.cacheDirectory + filename;
-      const { uri } = await LegacyFileSystem.downloadAsync(url, localUri);
-      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Save Photo' });
-    } catch {
-      Alert.alert('Error', 'Failed to save photo.');
-    } finally {
-      setSavingPhoto(false);
-    }
+      await Share.share({ url, message: url });
+    } catch { /* user cancelled share — not an error */ }
+    finally { setSavingPhoto(false); }
   };
 
   const handleExpandMap = () => {

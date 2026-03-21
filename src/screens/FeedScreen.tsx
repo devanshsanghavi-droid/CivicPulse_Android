@@ -111,8 +111,10 @@ export default function FeedScreen() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const locationFetched = useRef(false);
+  const hasActiveFilters = !!filterCat || !!filterStatus;
 
   // Request user location once on mount (silent — no blocking prompt)
   useEffect(() => {
@@ -168,66 +170,42 @@ export default function FeedScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       {!user && <GuestBanner />}
       <KeyboardAvoidingView behavior="padding" style={styles.container}>
-        {/* Search */}
-        <View style={[styles.searchRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Ionicons name="search" size={18} color={theme.textMuted} style={styles.searchIcon} />
-          <TextInput
-            style={[styles.searchInput, { color: theme.textPrimary }]}
-            placeholder="Search city issues..."
-            placeholderTextColor={theme.textMuted}
-            value={search}
-            onChangeText={setSearch}
-          />
+        {/* Search + Filter Toggle */}
+        <View style={styles.searchContainer}>
+          <View style={[styles.searchRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Ionicons name="search" size={16} color={theme.textMuted} />
+            <TextInput
+              style={[styles.searchInput, { color: theme.textPrimary }]}
+              placeholder="Search issues..."
+              placeholderTextColor={theme.textMuted}
+              value={search}
+              onChangeText={setSearch}
+            />
+            <TouchableOpacity
+              onPress={() => setShowCategories(!showCategories)}
+              style={[styles.filterToggle, hasActiveFilters && { backgroundColor: theme.primaryLight }]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="options-outline" size={16} color={hasActiveFilters ? theme.primary : theme.textMuted} />
+              {hasActiveFilters && <View style={[styles.filterDot, { backgroundColor: theme.primary }]} />}
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.issueCount, { color: theme.textMuted }]}>{issues.length}</Text>
         </View>
 
-        {/* Category Filter */}
-        <View style={styles.filterContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-            {[{ id: undefined, name: 'All' }, ...CATEGORIES].map(item => (
-              <TouchableOpacity
-                key={item.id || 'all'}
-                style={[styles.filterChip, { backgroundColor: theme.card, borderColor: theme.border }, filterCat === item.id && { backgroundColor: theme.primary, borderColor: theme.primary }]}
-                onPress={() => setFilterCat(item.id)}
-              >
-                <Text style={[styles.filterChipText, { color: theme.textSecondary }, filterCat === item.id && { color: '#ffffff' }]}>
-                  {item.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Status + Count + Sort — single compact row */}
+        {/* Sort + Status — single row */}
         <View style={styles.controlRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlScroll}>
             {[
-              { id: undefined, name: 'All' },
-              { id: 'open', name: 'Open' },
-              { id: 'acknowledged', name: 'Ack' },
-              { id: 'resolved', name: 'Resolved' },
-            ].map(item => (
-              <TouchableOpacity
-                key={item.id || 'all-status'}
-                style={[styles.statusPill, { borderColor: theme.border }, filterStatus === item.id && { backgroundColor: theme.primary, borderColor: theme.primary }]}
-                onPress={() => setFilterStatus(item.id)}
-              >
-                <Text style={[styles.statusPillText, { color: theme.textMuted }, filterStatus === item.id && { color: '#ffffff' }]}>
-                  {item.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            <Text style={[styles.sortDivider, { color: theme.border }]}>|</Text>
-            {[
-              { id: 'trending', label: 'Trending' },
-              { id: 'nearby', label: 'Near Me' },
-              { id: 'newest', label: 'Newest' },
-              { id: 'upvoted', label: 'Upvoted' },
+              { id: 'trending', label: 'Trending', icon: 'flame-outline' as const },
+              { id: 'nearby', label: 'Near Me', icon: 'location-outline' as const },
+              { id: 'newest', label: 'New', icon: 'time-outline' as const },
+              { id: 'upvoted', label: 'Top', icon: 'thumbs-up-outline' as const },
             ].map(s => (
               <TouchableOpacity
                 key={s.id}
                 onPress={() => {
                   if (s.id === 'nearby' && !userLocation) {
-                    // Re-request location if not available
                     (async () => {
                       try {
                         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -239,17 +217,52 @@ export default function FeedScreen() {
                   }
                   setSort(s.id);
                 }}
-                style={[styles.statusPill, { borderColor: theme.border }, sort === s.id && { backgroundColor: theme.primaryLight, borderColor: theme.primaryLight }]}
+                style={[styles.sortPill, sort === s.id && { backgroundColor: theme.primary }]}
               >
-                {s.id === 'nearby' && <Ionicons name="location" size={10} color={sort === s.id ? theme.primary : theme.textMuted} style={{ marginRight: 3 }} />}
-                <Text style={[styles.statusPillText, { color: theme.textMuted }, sort === s.id && { color: theme.primary }]}>
+                <Ionicons name={s.icon} size={12} color={sort === s.id ? '#ffffff' : theme.textMuted} />
+                <Text style={[styles.sortPillText, { color: theme.textMuted }, sort === s.id && { color: '#ffffff' }]}>
                   {s.label}
                 </Text>
               </TouchableOpacity>
             ))}
+            <View style={[styles.pillDivider, { backgroundColor: theme.border }]} />
+            {[
+              { id: undefined, name: 'All' },
+              { id: 'open', name: 'Open' },
+              { id: 'acknowledged', name: 'Ack' },
+              { id: 'resolved', name: 'Done' },
+            ].map(item => (
+              <TouchableOpacity
+                key={item.id || 'all-status'}
+                style={[styles.statusPill, filterStatus === item.id && { backgroundColor: theme.textPrimary }]}
+                onPress={() => setFilterStatus(item.id)}
+              >
+                <Text style={[styles.statusPillText, { color: theme.textMuted }, filterStatus === item.id && { color: isDark ? '#000000' : '#ffffff' }]}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
-          <Text style={[styles.sortCount, { color: theme.textMuted }]}>{issues.length}</Text>
         </View>
+
+        {/* Collapsible Category Filter */}
+        {showCategories && (
+          <View style={styles.categoryRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+              {[{ id: undefined, name: 'All Categories' }, ...CATEGORIES].map(item => (
+                <TouchableOpacity
+                  key={item.id || 'all'}
+                  style={[styles.categoryChip, { borderColor: theme.border }, filterCat === item.id && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                  onPress={() => setFilterCat(item.id)}
+                >
+                  <Text style={[styles.categoryChipText, { color: theme.textSecondary }, filterCat === item.id && { color: '#ffffff' }]}>
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Issues List */}
         {loading ? (
@@ -303,37 +316,45 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { flex: 1 },
 
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    paddingHorizontal: SPACING.lg, marginTop: SPACING.sm, marginBottom: 2,
+  },
   searchRow: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: BORDER_RADIUS.lg,
-    marginHorizontal: SPACING.lg, marginTop: SPACING.sm, marginBottom: SPACING.xs,
-    paddingHorizontal: SPACING.md, paddingVertical: 6,
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.md, paddingVertical: 7,
     borderWidth: 1,
   },
-  searchIcon: { marginRight: SPACING.sm },
-  searchInput: { flex: 1, ...TYPOGRAPHY.body, fontSize: 14 },
-
-  filterContainer: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.xs },
-  filterScroll: { gap: 6 },
-  filterChip: {
-    paddingHorizontal: SPACING.md, paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.round, borderWidth: 1,
-  },
-  filterChipText: { fontSize: 11, fontWeight: '700' },
+  searchInput: { flex: 1, ...TYPOGRAPHY.body, fontSize: 14, paddingVertical: 0 },
+  filterToggle: { padding: 4, borderRadius: 8, position: 'relative' },
+  filterDot: { position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: 3 },
+  issueCount: { fontSize: 12, fontWeight: '800', minWidth: 20, textAlign: 'center' },
 
   controlRow: {
-    flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: SPACING.lg, paddingVertical: SPACING.xs,
   },
-  controlScroll: { gap: 6, alignItems: 'center' },
+  controlScroll: { gap: 4, alignItems: 'center' },
+  sortPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  sortPillText: { fontSize: 12, fontWeight: '700' },
+  pillDivider: { width: 1, height: 16, marginHorizontal: 4 },
   statusPill: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  statusPillText: { fontSize: 12, fontWeight: '700' },
+
+  categoryRow: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xs },
+  categoryScroll: { gap: 6 },
+  categoryChip: {
+    paddingHorizontal: SPACING.sm, paddingVertical: 4,
     borderRadius: BORDER_RADIUS.round, borderWidth: 1,
   },
-  statusPillText: { fontSize: 11, fontWeight: '700' },
-  sortDivider: { fontSize: 14, marginHorizontal: 4 },
-  sortCount: { ...TYPOGRAPHY.microLabel, marginLeft: SPACING.sm },
+  categoryChipText: { fontSize: 11, fontWeight: '700' },
 
   list: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl, gap: SPACING.md },
 
