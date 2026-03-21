@@ -10,6 +10,7 @@ const KEYS = {
   CURRENT_USER: 'civicpulse_auth',
   USERS: 'civicpulse_users',
   UPVOTES: 'civicpulse_upvotes',
+  COMMENT_LIKES: 'civicpulse_commentLikes',
   NOTIFS: 'civicpulse_notifs',
 };
 
@@ -145,6 +146,32 @@ export const storageService = {
     }
   },
 
+  // --- Comment Likes ---
+
+  hasLikedComment: async (commentId: string, userId: string): Promise<boolean> => {
+    const likes = await getStored<{ commentId: string; userId: string }[]>(KEYS.COMMENT_LIKES, []);
+    return likes.some(l => l.commentId === commentId && l.userId === userId);
+  },
+
+  toggleCommentLike: async (commentId: string, userId: string): Promise<'added' | 'removed'> => {
+    const likes = await getStored<{ commentId: string; userId: string }[]>(KEYS.COMMENT_LIKES, []);
+    const existing = likes.find(l => l.commentId === commentId && l.userId === userId);
+    if (existing) {
+      const filtered = likes.filter(l => !(l.commentId === commentId && l.userId === userId));
+      await setStored(KEYS.COMMENT_LIKES, filtered);
+      return 'removed';
+    } else {
+      likes.push({ commentId, userId });
+      await setStored(KEYS.COMMENT_LIKES, likes);
+      return 'added';
+    }
+  },
+
+  getLikedCommentIds: async (userId: string): Promise<Set<string>> => {
+    const likes = await getStored<{ commentId: string; userId: string }[]>(KEYS.COMMENT_LIKES, []);
+    return new Set(likes.filter(l => l.userId === userId).map(l => l.commentId));
+  },
+
   // --- Notifications (local cache) ---
   // NOTE: Notifications are primarily managed in Firestore.
   // This local cache is used for offline/fast access.
@@ -192,6 +219,7 @@ export const storageService = {
     await AsyncStorage.multiRemove([
       KEYS.CURRENT_USER,
       KEYS.UPVOTES,
+      KEYS.COMMENT_LIKES,
       KEYS.NOTIFS,
     ]);
     // NOTE: We don't clear KEYS.USERS so the user record persists

@@ -264,23 +264,24 @@ export const firestoreService = {
     await checkBanned(userId);
     await checkRateLimit('toggleCommentLike', userId);
 
-    await updateDoc(doc(db, 'comments', commentId), {
-      likeCount: increment(isAdding ? 1 : -1)
-    });
-
     const likeRef = doc(db, 'commentLikes', `${commentId}_${userId}`);
-    if (isAdding) {
-      await setDoc(likeRef, { commentId, userId });
-    } else {
-      await deleteDoc(likeRef);
-    }
-  },
 
-  getCommentLikes: async (issueId: string, userId: string): Promise<Set<string>> => {
-    // Get all comments for this issue, then check which ones this user liked
-    const q = query(collection(db, 'commentLikes'), where('userId', '==', userId));
-    const snapshot = await getDocs(q);
-    return new Set(snapshot.docs.map(d => d.data().commentId));
+    if (isAdding) {
+      // Check if already liked (prevents double-increment from stale state)
+      const existing = await getDoc(likeRef);
+      if (existing.exists()) return; // already liked — no-op
+      await setDoc(likeRef, { commentId, userId });
+      await updateDoc(doc(db, 'comments', commentId), {
+        likeCount: increment(1)
+      });
+    } else {
+      const existing = await getDoc(likeRef);
+      if (!existing.exists()) return; // not liked — no-op
+      await deleteDoc(likeRef);
+      await updateDoc(doc(db, 'comments', commentId), {
+        likeCount: increment(-1)
+      });
+    }
   },
 
   deleteComment: async (id: string, adminName: string): Promise<void> => {

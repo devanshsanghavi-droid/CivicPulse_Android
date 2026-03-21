@@ -36,7 +36,7 @@ const STATUS_DARK: Record<string, { bg: string; text: string; marker: string }> 
 };
 
 export default function IssueDetailScreen() {
-  const { user, isDark, theme, isBanned, banMessage } = useApp();
+  const { user, isDark, theme, isBanned, banMessage, isAdmin } = useApp();
   const route = useRoute<RouteType>();
   const navigation = useNavigation<any>();
   const { issueId } = route.params;
@@ -72,13 +72,14 @@ export default function IssueDetailScreen() {
         setIssue(issueData);
         setComments(commentsData);
         if (user) {
-          const upvoted = await storageService.hasUpvoted(issueId, user.id);
-          if (!cancelled) setHasUpvoted(upvoted);
-          // Load comment likes — fail gracefully if rules not deployed yet
-          try {
-            const liked = await firestoreService.getCommentLikes(issueId, user.id);
-            if (!cancelled) setLikedComments(liked);
-          } catch { /* commentLikes collection may not have rules yet */ }
+          const [upvoted, liked] = await Promise.all([
+            storageService.hasUpvoted(issueId, user.id),
+            storageService.getLikedCommentIds(user.id),
+          ]);
+          if (!cancelled) {
+            setHasUpvoted(upvoted);
+            setLikedComments(liked);
+          }
           // Load upvoters if current user is the creator
           if (issueData && issueData.createdBy === user.id) {
             try {
@@ -138,25 +139,21 @@ export default function IssueDetailScreen() {
     if (likingRef.current.has(commentId)) return;
     likingRef.current.add(commentId);
 
-    const isLiked = likedComments.has(commentId);
-    const isAdding = !isLiked;
-    // Optimistic update
-    setLikedComments(prev => {
-      const next = new Set(prev);
-      if (isAdding) next.add(commentId); else next.delete(commentId);
-      return next;
-    });
-    setComments(prev => prev.map(c => c.id === commentId ? { ...c, likeCount: c.likeCount + (isAdding ? 1 : -1) } : c));
     try {
-      await firestoreService.toggleCommentLike(commentId, user.id, isAdding);
-    } catch {
-      // Revert on failure
+      // Use local storage as source of truth
+      const result = await storageService.toggleCommentLike(commentId, user.id);
+      const isAdding = result === 'added';
+      // Update UI
       setLikedComments(prev => {
         const next = new Set(prev);
-        if (isAdding) next.delete(commentId); else next.add(commentId);
+        if (isAdding) next.add(commentId); else next.delete(commentId);
         return next;
       });
-      setComments(prev => prev.map(c => c.id === commentId ? { ...c, likeCount: c.likeCount + (isAdding ? -1 : 1) } : c));
+      setComments(prev => prev.map(c => c.id === commentId ? { ...c, likeCount: c.likeCount + (isAdding ? 1 : -1) } : c));
+      // Sync to Firestore (best-effort — doc check prevents double-increment)
+      try {
+        await firestoreService.toggleCommentLike(commentId, user.id, isAdding);
+      } catch { /* Firestore sync failed — local state is still correct */ }
     } finally {
       likingRef.current.delete(commentId);
     }
@@ -171,6 +168,19 @@ export default function IssueDetailScreen() {
       setNewComment('');
     } catch { Alert.alert('Error', 'Failed to post comment.'); }
     finally { setCommenting(false); }
+  };
+
+  const handleDeleteComment = (commentId: string) => {
+    if (!user) return;
+    Alert.alert('Delete Comment', 'Are you sure you want to remove this comment?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await firestoreService.deleteComment(commentId, user.name);
+          setComments(prev => prev.filter(c => c.id !== commentId));
+        } catch { Alert.alert('Error', 'Failed to delete comment.'); }
+      }},
+    ]);
   };
 
   const handlePhotoScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -387,23 +397,34 @@ export default function IssueDetailScreen() {
                     <Text style={[styles.commentDate, { color: theme.textMuted }]}>{new Date(comment.createdAt).toLocaleDateString()}</Text>
                   </TouchableOpacity>
                   <Text style={[styles.commentBody, { color: theme.textSecondary }]}>{comment.body}</Text>
-                  <TouchableOpacity
-                    style={styles.commentLikeRow}
-                    onPress={() => handleCommentLike(comment.id)}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons
-                      name={likedComments.has(comment.id) ? 'heart' : 'heart-outline'}
-                      size={14}
-                      color={likedComments.has(comment.id) ? '#ef4444' : theme.textMuted}
-                    />
-                    {comment.likeCount > 0 && (
-                      <Text style={[styles.commentLikeCount, { color: likedComments.has(comment.id) ? '#ef4444' : theme.textMuted }]}>
-                        {comment.likeCount}
-                      </Text>
+                  <View style={styles.commentActions}>
+                    <TouchableOpacity
+                      style={styles.commentLikeRow}
+                      onPress={() => handleCommentLike(comment.id)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons
+                        name={likedComments.has(comment.id) ? 'heart' : 'heart-outline'}
+                        size={14}
+                        color={likedComments.has(comment.id) ? '#ef4444' : theme.textMuted}
+                      />
+                      {comment.likeCount > 0 && (
+                        <Text style={[styles.commentLikeCount, { color: likedComments.has(comment.id) ? '#ef4444' : theme.textMuted }]}>
+                          {comment.likeCount}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                    {(isAdmin || (user && user.id === comment.userId)) && (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteComment(comment.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="trash-outline" size={14} color={theme.textMuted} />
+                      </TouchableOpacity>
                     )}
-                  </TouchableOpacity>
+                  </View>
                 </View>
               ))
             )}
@@ -613,7 +634,8 @@ const styles = StyleSheet.create({
   commentAuthor: { ...TYPOGRAPHY.caption, fontWeight: '800', flex: 1 },
   commentDate: { ...TYPOGRAPHY.microLabel, fontWeight: '600' },
   commentBody: { ...TYPOGRAPHY.body, lineHeight: 21 },
-  commentLikeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: SPACING.sm, paddingTop: SPACING.xs },
+  commentActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.sm, paddingTop: SPACING.xs },
+  commentLikeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   commentLikeCount: { fontSize: 12, fontWeight: '700' },
 
   guestCommentCta: {
