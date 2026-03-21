@@ -33,7 +33,7 @@ import {
   Report,
   ResolutionSuggestion
 } from '../types';
-import { calculateTrendingScore } from './storage';
+import { calculateTrendingScore, calculateTrendingScoreWithDistance, distanceMiles } from './storage';
 import {
   checkRateLimit, checkBanned, checkDuplicate,
   sanitizeText, validatePhotoUri, validatePhotoBlob,
@@ -69,7 +69,11 @@ export const firestoreService = {
 
   // --- Issues ---
 
-  getIssues: async (sort: string = 'trending', categoryId?: string): Promise<Issue[]> => {
+  getIssues: async (
+    sort: string = 'trending',
+    categoryId?: string,
+    userLocation?: { latitude: number; longitude: number } | null
+  ): Promise<Issue[]> => {
     try {
       let q = query(
         collection(db, 'issues'),
@@ -82,13 +86,34 @@ export const firestoreService = {
         issues = issues.filter(i => i.categoryId === categoryId);
       }
 
+      const loc = userLocation;
       switch (sort) {
         case 'trending':
+          // If we have user location, factor distance into trending score
+          if (loc) {
+            return issues.sort((a, b) =>
+              calculateTrendingScoreWithDistance(b, loc.latitude, loc.longitude) -
+              calculateTrendingScoreWithDistance(a, loc.latitude, loc.longitude)
+            );
+          }
           return issues.sort((a, b) => calculateTrendingScore(b) - calculateTrendingScore(a));
         case 'newest':
           return issues.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         case 'upvoted':
           return issues.sort((a, b) => b.upvoteCount - a.upvoteCount);
+        case 'nearby':
+          // Pure distance sort — closest first; issues without coords go to bottom
+          if (loc) {
+            return issues.sort((a, b) => {
+              const aDist = (a.latitude != null && a.longitude != null)
+                ? distanceMiles(loc.latitude, loc.longitude, a.latitude, a.longitude) : Infinity;
+              const bDist = (b.latitude != null && b.longitude != null)
+                ? distanceMiles(loc.latitude, loc.longitude, b.latitude, b.longitude) : Infinity;
+              return aDist - bDist;
+            });
+          }
+          // No location available — fall back to newest
+          return issues.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         default:
           return issues;
       }

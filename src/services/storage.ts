@@ -37,6 +37,45 @@ export const calculateTrendingScore = (issue: Issue) => {
   return issue.upvoteCount * TRENDING_WEIGHT_UPVOTES + Math.max(0, TRENDING_RECENCY_DAYS - daysSince);
 };
 
+/** Haversine distance between two lat/lng points, in miles */
+export const distanceMiles = (
+  lat1: number, lon1: number, lat2: number, lon2: number
+): number => {
+  const R = 3958.8; // Earth radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+/**
+ * Trending score weighted by distance.
+ * - Within 5 mi: full score
+ * - 5–25 mi: linear decay to 30% of score
+ * - 25–50 mi: linear decay to 5% of score
+ * - Beyond 50 mi: 2% of score (nearly invisible)
+ */
+export const calculateTrendingScoreWithDistance = (
+  issue: Issue,
+  userLat: number,
+  userLon: number
+): number => {
+  const base = calculateTrendingScore(issue);
+  if (issue.latitude == null || issue.longitude == null) {
+    return base * 0.1; // no location = low priority
+  }
+  const dist = distanceMiles(userLat, userLon, issue.latitude, issue.longitude);
+  let multiplier: number;
+  if (dist <= 5) multiplier = 1.0;
+  else if (dist <= 25) multiplier = 1.0 - 0.7 * ((dist - 5) / 20);   // 1.0 → 0.3
+  else if (dist <= 50) multiplier = 0.3 - 0.25 * ((dist - 25) / 25);  // 0.3 → 0.05
+  else multiplier = 0.02;
+  return base * multiplier;
+};
+
 export const storageService = {
 
   // --- User ---

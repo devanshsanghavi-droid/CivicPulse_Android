@@ -1,5 +1,5 @@
 // src/screens/FeedScreen.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, ActivityIndicator, Image, SafeAreaView, RefreshControl, ScrollView, KeyboardAvoidingView
@@ -7,7 +7,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { firestoreService } from '../services/firestoreService';
+import { distanceMiles } from '../services/storage';
 import { Issue } from '../types';
 import { CATEGORIES } from '../constants';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -40,9 +42,9 @@ const StatusBadge = ({ status, isDark }: { status: string; isDark: boolean }) =>
   );
 };
 
-const IssueCard = ({ issue, onPress, theme, isDark }: { issue: Issue; onPress: () => void; theme: AppTheme; isDark: boolean }) => {
+const IssueCard = ({ issue, onPress, theme, isDark, distance }: { issue: Issue; onPress: () => void; theme: AppTheme; isDark: boolean; distance?: string }) => {
   const category = CATEGORIES.find(c => c.id === issue.categoryId);
-  const photo = issue.photos[0]?.url;
+  const photo = issue.photos?.[0]?.url;
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={onPress} activeOpacity={0.85}>
@@ -58,6 +60,12 @@ const IssueCard = ({ issue, onPress, theme, isDark }: { issue: Issue; onPress: (
         <View style={styles.cardMeta}>
           <Text style={[styles.cardCategory, { color: theme.primary }]}>{category?.name}</Text>
           {!photo && <StatusBadge status={issue.status} isDark={isDark} />}
+          {distance && (
+            <View style={[styles.distanceBadge, { backgroundColor: isDark ? '#1e3a5f' : '#eff6ff' }]}>
+              <Ionicons name="location" size={9} color={theme.primary} />
+              <Text style={[styles.distanceText, { color: theme.primary }]}>{distance}</Text>
+            </View>
+          )}
           <Text style={[styles.cardDate, { color: theme.textMuted }]}>
             {new Date(issue.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
           </Text>
@@ -86,6 +94,13 @@ const IssueCard = ({ issue, onPress, theme, isDark }: { issue: Issue; onPress: (
   );
 };
 
+/** Format distance for display */
+const formatDistance = (miles: number): string => {
+  if (miles < 0.1) return '<0.1 mi';
+  if (miles < 10) return `${miles.toFixed(1)} mi`;
+  return `${Math.round(miles)} mi`;
+};
+
 export default function FeedScreen() {
   const navigation = useNavigation<Nav>();
   const { user, isDark, theme } = useApp();
@@ -96,11 +111,27 @@ export default function FeedScreen() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const locationFetched = useRef(false);
+
+  // Request user location once on mount (silent — no blocking prompt)
+  useEffect(() => {
+    if (locationFetched.current) return;
+    locationFetched.current = true;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      } catch { /* location unavailable — trending works without it */ }
+    })();
+  }, []);
 
   const loadIssues = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await firestoreService.getIssues(sort, filterCat);
+      const data = await firestoreService.getIssues(sort, filterCat, userLocation);
       let filtered = data.filter(i =>
         i.title.toLowerCase().includes(search.toLowerCase()) ||
         i.description.toLowerCase().includes(search.toLowerCase())
@@ -109,8 +140,8 @@ export default function FeedScreen() {
       if (filterStatus) {
         filtered = filtered.filter(i => i.status === filterStatus);
       }
-      // Sort resolved to bottom (unless explicitly filtering for resolved)
-      if (!filterStatus) {
+      // Sort resolved to bottom (unless explicitly filtering for resolved or sorting by nearby)
+      if (!filterStatus && sort !== 'nearby') {
         filtered.sort((a, b) => {
           if (a.status === 'resolved' && b.status !== 'resolved') return 1;
           if (a.status !== 'resolved' && b.status === 'resolved') return -1;
@@ -123,7 +154,7 @@ export default function FeedScreen() {
     } finally {
       setLoading(false);
     }
-  }, [sort, filterCat, filterStatus, search]);
+  }, [sort, filterCat, filterStatus, search, userLocation]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -186,14 +217,33 @@ export default function FeedScreen() {
               </TouchableOpacity>
             ))}
             <Text style={[styles.sortDivider, { color: theme.border }]}>|</Text>
-            {['trending', 'newest', 'upvoted'].map(s => (
+            {[
+              { id: 'trending', label: 'Trending' },
+              { id: 'nearby', label: 'Near Me' },
+              { id: 'newest', label: 'Newest' },
+              { id: 'upvoted', label: 'Upvoted' },
+            ].map(s => (
               <TouchableOpacity
-                key={s}
-                onPress={() => setSort(s)}
-                style={[styles.statusPill, { borderColor: theme.border }, sort === s && { backgroundColor: theme.primaryLight, borderColor: theme.primaryLight }]}
+                key={s.id}
+                onPress={() => {
+                  if (s.id === 'nearby' && !userLocation) {
+                    // Re-request location if not available
+                    (async () => {
+                      try {
+                        const { status } = await Location.requestForegroundPermissionsAsync();
+                        if (status !== 'granted') return;
+                        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                        setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+                      } catch { /* ignore */ }
+                    })();
+                  }
+                  setSort(s.id);
+                }}
+                style={[styles.statusPill, { borderColor: theme.border }, sort === s.id && { backgroundColor: theme.primaryLight, borderColor: theme.primaryLight }]}
               >
-                <Text style={[styles.statusPillText, { color: theme.textMuted }, sort === s && { color: theme.primary }]}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                {s.id === 'nearby' && <Ionicons name="location" size={10} color={sort === s.id ? theme.primary : theme.textMuted} style={{ marginRight: 3 }} />}
+                <Text style={[styles.statusPillText, { color: theme.textMuted }, sort === s.id && { color: theme.primary }]}>
+                  {s.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -226,14 +276,21 @@ export default function FeedScreen() {
                 colors={[theme.primary]}
               />
             }
-            renderItem={({ item }) => (
-              <IssueCard
-                issue={item}
-                theme={theme}
-                isDark={isDark}
-                onPress={() => navigation.navigate('IssueDetail', { issueId: item.id })}
-              />
-            )}
+            renderItem={({ item }) => {
+              let dist: string | undefined;
+              if (userLocation && item.latitude != null && item.longitude != null) {
+                dist = formatDistance(distanceMiles(userLocation.latitude, userLocation.longitude, item.latitude, item.longitude));
+              }
+              return (
+                <IssueCard
+                  issue={item}
+                  theme={theme}
+                  isDark={isDark}
+                  distance={dist}
+                  onPress={() => navigation.navigate('IssueDetail', { issueId: item.id })}
+                />
+              );
+            }}
           />
         )}
       </KeyboardAvoidingView>
@@ -269,6 +326,7 @@ const styles = StyleSheet.create({
   },
   controlScroll: { gap: 6, alignItems: 'center' },
   statusPill: {
+    flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingVertical: 4,
     borderRadius: BORDER_RADIUS.round, borderWidth: 1,
   },
@@ -301,6 +359,12 @@ const styles = StyleSheet.create({
 
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: BORDER_RADIUS.round },
   badgeText: { ...TYPOGRAPHY.microLabel, letterSpacing: 0.5 },
+  distanceBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  distanceText: { fontSize: 10, fontWeight: '700' },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { ...TYPOGRAPHY.microLabel, letterSpacing: 2 },
