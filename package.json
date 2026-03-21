@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@mapbox/geo-viewport": "^0.5.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-google-signin/google-signin": "^16.1.1",
     "@react-navigation/bottom-tabs": "^7.14.0",
@@ -38,10 +39,13 @@
     "react-native-maps": "1.20.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-webview": "13.15.0"
+    "react-native-webview": "13.15.0",
+    "supercluster": "^8.0.1"
   },
   "devDependencies": {
+    "@types/mapbox__geo-viewport": "^0.5.3",
     "@types/react": "~19.1.0",
+    "@types/supercluster": "^7.1.3",
     "eas-cli": "^13.0.2",
     "typescript": "~5.9.2"
   },

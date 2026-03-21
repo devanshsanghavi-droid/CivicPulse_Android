@@ -40,7 +40,7 @@ export default function LoginScreen() {
     try {
       const user = await signInWithGoogle();
       await setUser(user);
-      navigation.navigate('Main', { screen: 'Feed' });
+      // Navigation is handled by AppNavigator's useEffect on user state change
     } catch (err: any) {
       Alert.alert('Sign-In Failed', err.message || 'Failed to sign in with Google. Please try again.');
     } finally {
@@ -73,12 +73,11 @@ export default function LoginScreen() {
       if (isSignUp) {
         const user = await signUpWithEmail(email.trim(), password, name.trim());
         await setUser(user);
-        navigation.navigate('Main', { screen: 'Feed' });
       } else {
         const user = await signInWithEmail(email.trim(), password);
         await setUser(user);
-        navigation.navigate('Main', { screen: 'Feed' });
       }
+      // Navigation is handled by AppNavigator's useEffect on user state change
     } catch (err: any) {
       Alert.alert(isSignUp ? 'Sign-Up Failed' : 'Sign-In Failed', err.message || 'Something went wrong.');
     } finally {

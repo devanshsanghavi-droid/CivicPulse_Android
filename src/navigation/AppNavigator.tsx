@@ -2,9 +2,9 @@
 // Replaces your web app's string-based screen routing (currentScreen state)
 // with React Navigation's stack + bottom tab navigator.
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator, StackNavigationProp } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
@@ -153,11 +153,32 @@ export default function AppNavigator() {
   const { user, isAuthLoading } = useApp();
   const issueDetailOptions = useIssueDetailOptions();
   const userProfileOptions = useUserProfileOptions();
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
+  const prevUser = useRef<boolean>(!!user);
+
+  // When auth state changes, reset navigation to the appropriate root screen.
+  // This runs in AppNavigator (which never unmounts), so it's immune to the
+  // race condition where LoginScreen's navigate() fires on a stale ref.
+  useEffect(() => {
+    if (isAuthLoading) return;
+    const wasLoggedIn = prevUser.current;
+    const isLoggedIn = !!user;
+    prevUser.current = isLoggedIn;
+
+    // Only reset when auth state actually changes
+    if (wasLoggedIn === isLoggedIn) return;
+    if (!navigationRef.isReady()) return;
+
+    navigationRef.reset({
+      index: 0,
+      routes: [{ name: isLoggedIn ? 'Main' : 'Landing' }],
+    });
+  }, [user, isAuthLoading]);
 
   if (isAuthLoading) return <LoadingScreen />;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         key={user ? 'authed' : 'guest'}
         initialRouteName={user ? 'Main' : 'Landing'}

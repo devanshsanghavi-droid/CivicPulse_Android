@@ -1,18 +1,19 @@
 // src/screens/MapScreen.tsx
-// Replaces Leaflet with react-native-maps (MapKit on iOS)
-import React, { useState, useEffect, useRef } from 'react';
+// Uses supercluster directly for reliable pin clustering (replaces react-native-map-clustering)
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Dimensions
 } from 'react-native';
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
-import ClusteredMapView from 'react-native-map-clustering';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import SuperCluster from 'supercluster';
+import GeoViewport from '@mapbox/geo-viewport';
 import { firestoreService } from '../services/firestoreService';
 import { Issue } from '../types';
 import { CATEGORIES } from '../constants';
@@ -26,7 +27,8 @@ type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
   StackNavigationProp<RootStackParamList>
 >;
-type RouteType = RouteProp<RootStackParamList, 'Main'>;
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // Default map center
 const DEFAULT_REGION: Region = {
@@ -36,15 +38,99 @@ const DEFAULT_REGION: Region = {
   longitudeDelta: 0.05,
 };
 
+// --- Clustering helpers (ported from react-native-map-clustering/helpers.js) ---
+
+function calculateBBox(region: Region): [number, number, number, number] {
+  const lngD = region.longitudeDelta < 0 ? region.longitudeDelta + 360 : region.longitudeDelta;
+  return [
+    region.longitude - lngD,
+    region.latitude - region.latitudeDelta,
+    region.longitude + lngD,
+    region.latitude + region.latitudeDelta,
+  ];
+}
+
+function getZoom(region: Region, bbox: [number, number, number, number], minZoom: number): number {
+  if (region.longitudeDelta >= 40) return minZoom;
+  const vp = GeoViewport.viewport(bbox, [SCREEN_W, SCREEN_H]);
+  return vp.zoom;
+}
+
+function clusterSize(count: number) {
+  if (count >= 50) return { outer: 84, inner: 64, font: 20 };
+  if (count >= 25) return { outer: 78, inner: 58, font: 19 };
+  if (count >= 15) return { outer: 72, inner: 54, font: 18 };
+  if (count >= 10) return { outer: 66, inner: 50, font: 17 };
+  if (count >= 8) return { outer: 60, inner: 46, font: 17 };
+  if (count >= 4) return { outer: 54, inner: 40, font: 16 };
+  return { outer: 48, inner: 36, font: 15 };
+}
+
+// --- Types ---
+
+interface PointProperties {
+  index: number;
+  issueId: string;
+}
+
+type ClusterOrPoint = SuperCluster.ClusterFeature<SuperCluster.AnyProps> | SuperCluster.PointFeature<PointProperties>;
+
+// --- Component ---
+
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
-  const { user, locationExplained, setLocationExplained, isDark, theme } = useApp();
+  const { user, isDark, theme } = useApp();
   const navigation = useNavigation<Nav>();
   const mapRef = useRef<MapView>(null);
   const toastRef = useRef<AuthPromptToastRef>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
+  const [displayedMarkers, setDisplayedMarkers] = useState<ClusterOrPoint[]>([]);
+
+  // Build supercluster index whenever issues change
+  const clusterIndex = useMemo(() => {
+    const index = new SuperCluster({
+      radius: 50,
+      maxZoom: 20,
+      minZoom: 1,
+      minPoints: 2,
+      extent: 512,
+      nodeSize: 64,
+    });
+
+    const validIssues = issues.filter(i => i.latitude != null && i.longitude != null);
+    const points: SuperCluster.PointFeature<PointProperties>[] = validIssues.map((issue, idx) => ({
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [issue.longitude!, issue.latitude!],
+      },
+      properties: { index: idx, issueId: issue.id },
+    }));
+
+    index.load(points);
+    return index;
+  }, [issues]);
+
+  // Filtered issues for marker lookup
+  const validIssues = useMemo(
+    () => issues.filter(i => i.latitude != null && i.longitude != null),
+    [issues]
+  );
+
+  // Recompute visible clusters whenever region or data changes
+  const updateClusters = useCallback((reg: Region) => {
+    const bbox = calculateBBox(reg);
+    const zoom = getZoom(reg, bbox, 1);
+    const clusters = clusterIndex.getClusters(bbox, zoom) as ClusterOrPoint[];
+    setDisplayedMarkers(clusters);
+  }, [clusterIndex]);
+
+  // Recompute clusters when clusterIndex changes (new data)
+  useEffect(() => {
+    updateClusters(region);
+  }, [clusterIndex]);
 
   useEffect(() => {
     const loadIssues = async () => {
@@ -79,30 +165,82 @@ export default function MapScreen() {
     }
   };
 
+  const handleRegionChange = useCallback((reg: Region) => {
+    setRegion(reg);
+    updateClusters(reg);
+  }, [updateClusters]);
+
+  const handleClusterPress = useCallback((clusterId: number) => {
+    try {
+      const leaves = clusterIndex.getLeaves(clusterId, Infinity);
+      const coords = leaves.map(l => ({
+        latitude: l.geometry.coordinates[1],
+        longitude: l.geometry.coordinates[0],
+      }));
+      if (coords.length > 0) {
+        mapRef.current?.fitToCoordinates(coords, {
+          edgePadding: { top: 50, left: 50, right: 50, bottom: 50 },
+          animated: true,
+        });
+      }
+    } catch {
+      // Cluster no longer valid — ignore
+    }
+  }, [clusterIndex]);
+
   const overlayBg = isDark ? 'rgba(15,23,42,0.9)' : 'rgba(255,255,255,0.95)';
   const overlayBgLight = isDark ? 'rgba(15,23,42,0.85)' : 'rgba(255,255,255,0.9)';
 
   return (
     <View style={styles.container}>
-      <ClusteredMapView
+      <MapView
         ref={mapRef}
         style={styles.map}
         initialRegion={region}
         showsUserLocation
         showsMyLocationButton={false}
         userInterfaceStyle={isDark ? 'dark' : 'light'}
-        clusterColor="#f59e0b"
-        clusterTextColor="#ffffff"
-        radius={50}
-        minPoints={2}
+        onRegionChangeComplete={handleRegionChange}
       >
-        {issues.filter(issue => issue.latitude != null && issue.longitude != null).map(issue => {
+        {displayedMarkers.map(marker => {
+          const coords = {
+            latitude: marker.geometry.coordinates[1],
+            longitude: marker.geometry.coordinates[0],
+          };
+
+          // Cluster marker
+          if (marker.properties && 'cluster' in marker.properties && marker.properties.cluster) {
+            const count = marker.properties.point_count;
+            const id = marker.properties.cluster_id;
+            const sz = clusterSize(count);
+            return (
+              <Marker
+                key={`cluster-${id}-${count}`}
+                coordinate={coords}
+                onPress={() => handleClusterPress(id)}
+                tracksViewChanges={false}
+              >
+                <View style={[styles.clusterOuter, { width: sz.outer, height: sz.outer, borderRadius: sz.outer / 2 }]}>
+                  <View style={[styles.clusterInner, { width: sz.inner, height: sz.inner, borderRadius: sz.inner / 2 }]}>
+                    <Text style={[styles.clusterText, { fontSize: sz.font }]}>{count}</Text>
+                  </View>
+                </View>
+              </Marker>
+            );
+          }
+
+          // Individual pin
+          const props = marker.properties as PointProperties;
+          const issue = validIssues[props.index];
+          if (!issue) return null;
+
           const color = theme[issue.status as 'open' | 'acknowledged' | 'resolved'] || theme.open;
           const category = CATEGORIES.find(c => c.id === issue.categoryId);
+
           return (
             <Marker
-              key={issue.id}
-              coordinate={{ latitude: issue.latitude!, longitude: issue.longitude! }}
+              key={`pin-${issue.id}`}
+              coordinate={coords}
               pinColor={color}
             >
               <Callout
@@ -122,7 +260,7 @@ export default function MapScreen() {
             </Marker>
           );
         })}
-      </ClusteredMapView>
+      </MapView>
 
       {/* Header pill */}
       <View style={[styles.headerPill, { backgroundColor: overlayBg, top: 16 + insets.top }]}>
@@ -153,7 +291,7 @@ export default function MapScreen() {
         <Ionicons name="locate" size={22} color={theme.primary} />
       </TouchableOpacity>
 
-      {/* Report FAB — always visible; guests get an auth prompt toast */}
+      {/* Report FAB */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: theme.primary, ...SHADOWS.colored(theme.primary) }]}
         onPress={() => {
@@ -168,7 +306,7 @@ export default function MapScreen() {
         <Ionicons name="add" size={28} color="#ffffff" />
       </TouchableOpacity>
 
-      {/* Guest banner — floats above the map */}
+      {/* Guest banner */}
       {!user && <GuestBanner style={[styles.guestBanner, { top: 72 + insets.top }]} />}
 
       <AuthPromptToast ref={toastRef} />
@@ -179,6 +317,23 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
+
+  // Cluster markers
+  clusterOuter: {
+    backgroundColor: 'rgba(245, 158, 11, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clusterInner: {
+    backgroundColor: '#f59e0b',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clusterText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    textAlign: 'center',
+  },
 
   headerPill: {
     position: 'absolute', alignSelf: 'center',
