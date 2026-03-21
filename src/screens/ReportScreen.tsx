@@ -40,6 +40,7 @@ export default function ReportScreen() {
   const [pinLocation, setPinLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [pinAddress, setPinAddress] = useState('');
   const [addressResult, setAddressResult] = useState<{ lat: number; lng: number; display: string } | null>(null);
+  const [expandedMap, setExpandedMap] = useState<'gps' | 'address' | null>(null);
 
   useEffect(() => { getLocation(); }, []);
 
@@ -265,10 +266,22 @@ export default function ReportScreen() {
                     </Text>
                   </TouchableOpacity>
                   {location && (
-                    <MapView style={styles.locMapPreview} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} pitchEnabled={false} userInterfaceStyle={isDark ? 'dark' : 'light'}
-                      region={{ latitude: location.latitude, longitude: location.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }}>
-                      <Marker coordinate={location} pinColor={theme.primary} />
-                    </MapView>
+                    <View>
+                      <MapView
+                        style={expandedMap === 'gps' ? styles.locMapExpanded : styles.locMapPreview}
+                        userInterfaceStyle={isDark ? 'dark' : 'light'}
+                        region={{ latitude: location.latitude, longitude: location.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }}
+                      >
+                        <Marker coordinate={location} pinColor={theme.primary} />
+                      </MapView>
+                      <TouchableOpacity
+                        style={[styles.expandMapBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+                        onPress={() => setExpandedMap(expandedMap === 'gps' ? null : 'gps')}
+                      >
+                        <Ionicons name={expandedMap === 'gps' ? 'contract' : 'expand'} size={14} color={theme.primary} />
+                        <Text style={[styles.expandMapText, { color: theme.primary }]}>{expandedMap === 'gps' ? 'Collapse' : 'Expand Map'}</Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
                 </View>
               )}
@@ -284,10 +297,22 @@ export default function ReportScreen() {
                   {addressResult && (
                     <>
                       <Text style={[styles.resolvedAddress, { color: theme.textSecondary }]}>{addressResult.display}</Text>
-                      <MapView style={styles.locMapPreview} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} pitchEnabled={false} userInterfaceStyle={isDark ? 'dark' : 'light'}
-                        region={{ latitude: addressResult.lat, longitude: addressResult.lng, latitudeDelta: 0.005, longitudeDelta: 0.005 }}>
-                        <Marker coordinate={{ latitude: addressResult.lat, longitude: addressResult.lng }} pinColor={theme.primary} />
-                      </MapView>
+                      <View>
+                        <MapView
+                          style={expandedMap === 'address' ? styles.locMapExpanded : styles.locMapPreview}
+                          userInterfaceStyle={isDark ? 'dark' : 'light'}
+                          region={{ latitude: addressResult.lat, longitude: addressResult.lng, latitudeDelta: 0.005, longitudeDelta: 0.005 }}
+                        >
+                          <Marker coordinate={{ latitude: addressResult.lat, longitude: addressResult.lng }} pinColor={theme.primary} />
+                        </MapView>
+                        <TouchableOpacity
+                          style={[styles.expandMapBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+                          onPress={() => setExpandedMap(expandedMap === 'address' ? null : 'address')}
+                        >
+                          <Ionicons name={expandedMap === 'address' ? 'contract' : 'expand'} size={14} color={theme.primary} />
+                          <Text style={[styles.expandMapText, { color: theme.primary }]}>{expandedMap === 'address' ? 'Collapse' : 'Expand Map'}</Text>
+                        </TouchableOpacity>
+                      </View>
                     </>
                   )}
                 </View>
@@ -367,7 +392,10 @@ const styles = StyleSheet.create({
   locationText: { ...TYPOGRAPHY.body, flex: 1 },
 
   locMapPreview: { width: '100%', height: 180, borderRadius: BORDER_RADIUS.lg, marginTop: SPACING.md, overflow: 'hidden' },
+  locMapExpanded: { width: '100%', height: 360, borderRadius: BORDER_RADIUS.lg, marginTop: SPACING.md, overflow: 'hidden' },
   locMapInteractive: { width: '100%', height: 280, borderRadius: BORDER_RADIUS.lg, overflow: 'hidden' },
+  expandMapBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: SPACING.sm, paddingVertical: 8, borderRadius: BORDER_RADIUS.md, borderWidth: 1 },
+  expandMapText: { fontSize: 12, fontWeight: '700' },
   addressRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' },
   searchBtn: { width: 44, height: 44, borderRadius: BORDER_RADIUS.lg, alignItems: 'center', justifyContent: 'center' },
   resolvedAddress: { ...TYPOGRAPHY.body, fontSize: 13, marginTop: SPACING.sm, lineHeight: 20 },
