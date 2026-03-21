@@ -173,7 +173,7 @@ export default function FeedScreen() {
         {/* Search + Filter Toggle */}
         <View style={styles.searchContainer}>
           <View style={[styles.searchRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Ionicons name="search" size={16} color={theme.textMuted} />
+            <Ionicons name="search" size={17} color={theme.textMuted} />
             <TextInput
               style={[styles.searchInput, { color: theme.textPrimary }]}
               placeholder="Search issues..."
@@ -186,7 +186,7 @@ export default function FeedScreen() {
               style={[styles.filterToggle, hasActiveFilters && { backgroundColor: theme.primaryLight }]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="options-outline" size={16} color={hasActiveFilters ? theme.primary : theme.textMuted} />
+              <Ionicons name="options-outline" size={18} color={hasActiveFilters ? theme.primary : theme.textMuted} />
               {hasActiveFilters && <View style={[styles.filterDot, { backgroundColor: theme.primary }]} />}
             </TouchableOpacity>
           </View>
@@ -219,7 +219,7 @@ export default function FeedScreen() {
                 }}
                 style={[styles.sortPill, sort === s.id && { backgroundColor: theme.primary }]}
               >
-                <Ionicons name={s.icon} size={12} color={sort === s.id ? '#ffffff' : theme.textMuted} />
+                <Ionicons name={s.icon} size={14} color={sort === s.id ? '#ffffff' : theme.textMuted} />
                 <Text style={[styles.sortPillText, { color: theme.textMuted }, sort === s.id && { color: '#ffffff' }]}>
                   {s.label}
                 </Text>
@@ -323,30 +323,30 @@ const styles = StyleSheet.create({
   searchRow: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     borderRadius: BORDER_RADIUS.round,
-    paddingHorizontal: SPACING.md, paddingVertical: 7,
+    paddingHorizontal: SPACING.md, paddingVertical: 9,
     borderWidth: 1,
   },
   searchInput: { flex: 1, ...TYPOGRAPHY.body, fontSize: 14, paddingVertical: 0 },
-  filterToggle: { padding: 4, borderRadius: 8, position: 'relative' },
+  filterToggle: { padding: 6, borderRadius: 8, position: 'relative' },
   filterDot: { position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: 3 },
   issueCount: { fontSize: 12, fontWeight: '800', minWidth: 20, textAlign: 'center' },
 
   controlRow: {
-    paddingHorizontal: SPACING.lg, paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.lg, paddingVertical: SPACING.xs + 2,
   },
-  controlScroll: { gap: 4, alignItems: 'center' },
+  controlScroll: { gap: 6, alignItems: 'center' },
   sortPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 5,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 13, paddingVertical: 7,
     borderRadius: BORDER_RADIUS.round,
   },
-  sortPillText: { fontSize: 12, fontWeight: '700' },
-  pillDivider: { width: 1, height: 16, marginHorizontal: 4 },
+  sortPillText: { fontSize: 13, fontWeight: '700' },
+  pillDivider: { width: 1, height: 18, marginHorizontal: 6 },
   statusPill: {
-    paddingHorizontal: 10, paddingVertical: 5,
+    paddingHorizontal: 13, paddingVertical: 7,
     borderRadius: BORDER_RADIUS.round,
   },
-  statusPillText: { fontSize: 12, fontWeight: '700' },
+  statusPillText: { fontSize: 13, fontWeight: '700' },
 
   categoryRow: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xs },
   categoryScroll: { gap: 6 },
