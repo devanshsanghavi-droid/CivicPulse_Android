@@ -561,12 +561,21 @@ export const firestoreService = {
   submitResolutionSuggestion: async (data: Omit<ResolutionSuggestion, 'id'>): Promise<ResolutionSuggestion> => {
     await checkBanned(data.suggestedBy);
     await checkRateLimit('submitSuggestion', data.suggestedBy);
-    const sanitized = {
-      ...data,
-      reason: data.reason ? sanitizeText(data.reason, LIMITS.RESOLUTION_REASON) : undefined,
+    // Build clean object — Firestore rejects undefined values
+    const sanitized: Record<string, any> = {
+      issueId: data.issueId,
+      issueTitle: data.issueTitle,
+      suggestedBy: data.suggestedBy,
+      suggestedByName: data.suggestedByName,
+      suggestedByPhotoURL: data.suggestedByPhotoURL || '',
+      status: data.status,
+      createdAt: data.createdAt,
     };
+    if (data.reason) {
+      sanitized.reason = sanitizeText(data.reason, LIMITS.RESOLUTION_REASON);
+    }
     const docRef = await addDoc(collection(db, 'resolutionSuggestions'), sanitized);
-    return { id: docRef.id, ...sanitized };
+    return { id: docRef.id, ...sanitized } as ResolutionSuggestion;
   },
 
   getResolutionSuggestions: async (status?: string): Promise<ResolutionSuggestion[]> => {

@@ -4,7 +4,7 @@ import {
   View, Text, StyleSheet, ScrollView, Image,
   TouchableOpacity, TextInput, ActivityIndicator,
   Alert, SafeAreaView, KeyboardAvoidingView, Platform,
-  Dimensions, NativeSyntheticEvent, NativeScrollEvent
+  Dimensions, NativeSyntheticEvent, NativeScrollEvent, Modal
 } from 'react-native';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -48,6 +48,9 @@ export default function IssueDetailScreen() {
   const [commenting, setCommenting] = useState(false);
   const [upvoting, setUpvoting] = useState(false);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [resolveReason, setResolveReason] = useState('');
+  const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
   const toastRef = useRef<AuthPromptToastRef>(null);
 
   useEffect(() => {
@@ -103,6 +106,30 @@ export default function IssueDetailScreen() {
 
   const handlePhotoScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     setActivePhotoIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH));
+  };
+
+  const handleSubmitResolution = async () => {
+    if (!user || !issue || submittingSuggestion) return;
+    setSubmittingSuggestion(true);
+    try {
+      await firestoreService.submitResolutionSuggestion({
+        issueId: issue.id,
+        issueTitle: issue.title,
+        suggestedBy: user.id,
+        suggestedByName: user.name,
+        suggestedByPhotoURL: user.photoURL || '',
+        reason: resolveReason.trim() || undefined,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+      setShowResolveModal(false);
+      setResolveReason('');
+      Alert.alert('Submitted', 'Your resolution suggestion has been submitted for admin review.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to submit suggestion.');
+    } finally {
+      setSubmittingSuggestion(false);
+    }
   };
 
   const handleExpandMap = () => {
@@ -214,34 +241,7 @@ export default function IssueDetailScreen() {
             {user && issue.status !== 'resolved' && (
               <TouchableOpacity
                 style={[styles.suggestResolveBtn, { borderColor: theme.success }]}
-                onPress={() => {
-                  Alert.alert(
-                    'Suggest Resolution',
-                    'Do you believe this issue has been resolved? An admin will review your suggestion.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Submit',
-                        onPress: async () => {
-                          try {
-                            await firestoreService.submitResolutionSuggestion({
-                              issueId: issue.id,
-                              issueTitle: issue.title,
-                              suggestedBy: user.id,
-                              suggestedByName: user.name,
-                              suggestedByPhotoURL: user.photoURL || '',
-                              status: 'pending',
-                              createdAt: new Date().toISOString(),
-                            });
-                            Alert.alert('Submitted', 'Your resolution suggestion has been submitted for admin review.');
-                          } catch {
-                            Alert.alert('Error', 'Failed to submit suggestion.');
-                          }
-                        },
-                      },
-                    ]
-                  );
-                }}
+                onPress={() => setShowResolveModal(true)}
                 activeOpacity={0.8}
               >
                 <Ionicons name="checkmark-circle-outline" size={18} color={theme.success} />
@@ -306,6 +306,47 @@ export default function IssueDetailScreen() {
             <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
           </TouchableOpacity>
         )}
+        {/* Resolution Suggestion Modal */}
+        <Modal visible={showResolveModal} transparent animationType="fade" onRequestClose={() => setShowResolveModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Suggest as Resolved</Text>
+              <Text style={[styles.modalDesc, { color: theme.textSecondary }]}>
+                Do you believe this issue has been resolved? An admin will review your suggestion.
+              </Text>
+              <TextInput
+                style={[styles.modalInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.textPrimary }]}
+                placeholder="Why do you think it's resolved? (optional)"
+                placeholderTextColor={theme.textMuted}
+                value={resolveReason}
+                onChangeText={setResolveReason}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                maxLength={500}
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalCancelBtn, { borderColor: theme.border }]}
+                  onPress={() => { setShowResolveModal(false); setResolveReason(''); }}
+                >
+                  <Text style={[styles.modalCancelText, { color: theme.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSubmitBtn, { backgroundColor: theme.success }]}
+                  onPress={handleSubmitResolution}
+                  disabled={submittingSuggestion}
+                >
+                  {submittingSuggestion ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>Submit</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
         <AuthPromptToast ref={toastRef} />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -390,4 +431,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
   },
+
+  // Resolution suggestion modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
+  modalContent: { width: '100%', borderRadius: BORDER_RADIUS.xl, padding: SPACING.xl, ...SHADOWS.medium },
+  modalTitle: { ...TYPOGRAPHY.cardTitle, fontSize: 18, marginBottom: SPACING.sm },
+  modalDesc: { ...TYPOGRAPHY.body, fontSize: 14, lineHeight: 21, marginBottom: SPACING.lg },
+  modalInput: { borderRadius: BORDER_RADIUS.lg, borderWidth: 1, paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, ...TYPOGRAPHY.body, fontSize: 14, minHeight: 80, marginBottom: SPACING.lg },
+  modalActions: { flexDirection: 'row', gap: SPACING.sm },
+  modalCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, borderWidth: 1 },
+  modalCancelText: { ...TYPOGRAPHY.caption, fontWeight: '700' },
+  modalSubmitBtn: { flex: 1, alignItems: 'center', paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg },
+  modalSubmitText: { ...TYPOGRAPHY.caption, fontWeight: '800', color: '#ffffff' },
 });
