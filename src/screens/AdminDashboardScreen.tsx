@@ -139,14 +139,41 @@ export default function AdminDashboardScreen() {
     catch { Alert.alert('Error', 'Failed.'); }
   };
 
-  const handlePromote = async () => {
+  const handlePromote = async (toRole: 'admin' | 'super_admin' = 'admin') => {
     if (!selectedUser) return;
-    Alert.alert('Promote to Admin', `Promote ${selectedUser.name}?`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Promote', onPress: async () => { try { await firestoreService.setUserRole(selectedUser.id, 'admin'); setSelectedUser({ ...selectedUser, role: 'admin' }); loadData(); } catch { Alert.alert('Error', 'Failed.'); } } }]);
+    const label = toRole === 'super_admin' ? 'Super Admin' : 'Admin';
+    Alert.alert(`Promote to ${label}`, `Promote ${selectedUser.name} to ${label}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Promote', onPress: async () => {
+        try {
+          console.log(`[Admin] Promoting ${selectedUser.email} (${selectedUser.id}) to ${toRole}`);
+          await firestoreService.setUserRole(selectedUser.id, toRole);
+          setSelectedUser({ ...selectedUser, role: toRole });
+          loadData();
+        } catch (err: any) {
+          console.error('[Admin] Promote failed:', err);
+          Alert.alert('Error', err.message || 'Failed to promote user.');
+        }
+      }}
+    ]);
   };
 
   const handleDemote = async () => {
     if (!selectedUser) return;
-    Alert.alert('Demote to Resident', `Demote ${selectedUser.name}?`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Demote', style: 'destructive', onPress: async () => { try { await firestoreService.setUserRole(selectedUser.id, 'resident'); setSelectedUser({ ...selectedUser, role: 'resident' }); loadData(); } catch { Alert.alert('Error', 'Failed.'); } } }]);
+    Alert.alert('Demote to Resident', `Demote ${selectedUser.name}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Demote', style: 'destructive', onPress: async () => {
+        try {
+          console.log(`[Admin] Demoting ${selectedUser.email} (${selectedUser.id}) to resident`);
+          await firestoreService.setUserRole(selectedUser.id, 'resident');
+          setSelectedUser({ ...selectedUser, role: 'resident' });
+          loadData();
+        } catch (err: any) {
+          console.error('[Admin] Demote failed:', err);
+          Alert.alert('Error', err.message || 'Failed to demote user.');
+        }
+      }}
+    ]);
   };
 
   const handleDeleteComment = (c: Comment) => {
@@ -507,11 +534,17 @@ export default function AdminDashboardScreen() {
                       )}
                       {isSuperAdmin && (
                         <View style={styles.promoteRow}>
-                          {selectedUser.role === 'resident' || selectedUser.role === 'guest' ? (
-                            <TouchableOpacity style={[styles.promoteBtn, { borderColor: theme.primary }]} onPress={handlePromote}>
+                          {(selectedUser.role === 'resident' || selectedUser.role === 'guest') && (
+                            <TouchableOpacity style={[styles.promoteBtn, { borderColor: theme.primary }]} onPress={() => handlePromote('admin')}>
                               <Ionicons name="arrow-up-circle" size={16} color={theme.primary} /><Text style={[styles.promoteBtnText, { color: theme.primary }]}>Promote to Admin</Text>
                             </TouchableOpacity>
-                          ) : (
+                          )}
+                          {selectedUser.role === 'admin' && (
+                            <TouchableOpacity style={[styles.promoteBtn, { borderColor: theme.success, marginBottom: SPACING.sm }]} onPress={() => handlePromote('super_admin')}>
+                              <Ionicons name="arrow-up-circle" size={16} color={theme.success} /><Text style={[styles.promoteBtnText, { color: theme.success }]}>Promote to Super Admin</Text>
+                            </TouchableOpacity>
+                          )}
+                          {(['admin', 'super_admin'] as string[]).includes(selectedUser.role) && (
                             <TouchableOpacity style={[styles.demoteBtn, { borderColor: theme.warning }]} onPress={handleDemote}>
                               <Ionicons name="arrow-down-circle" size={16} color={theme.warning} /><Text style={[styles.demoteBtnText, { color: theme.warning }]}>Demote to Resident</Text>
                             </TouchableOpacity>

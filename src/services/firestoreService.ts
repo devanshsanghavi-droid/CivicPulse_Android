@@ -505,7 +505,8 @@ export const firestoreService = {
   // --- Role management (super_admin only) ---
 
   setUserRole: async (userId: string, role: UserRole): Promise<void> => {
-    await updateDoc(doc(db, 'users', userId), { role });
+    console.log(`[Firestore] setUserRole: ${userId} -> ${role}`);
+    await setDoc(doc(db, 'users', userId), { role }, { merge: true });
   },
 
   // --- Resolution Suggestions ---

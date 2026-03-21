@@ -271,8 +271,10 @@ export const convertFirebaseUserToAppUser = async (
   // Check if user exists in local storage first
   const existingUser = await storageService.getCurrentUser();
   if (existingUser && existingUser.email === email) {
-    // Update photo and name if changed
-    return await storageService.upsertUser({ ...existingUser, photoURL, name });
+    // Always re-check super admin status from the email list
+    const shouldBeSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+    const role = shouldBeSuperAdmin ? 'super_admin' : existingUser.role;
+    return await storageService.upsertUser({ ...existingUser, photoURL, name, role });
   }
 
   // Otherwise create from Firebase data
