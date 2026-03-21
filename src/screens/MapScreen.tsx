@@ -1,19 +1,17 @@
 // src/screens/MapScreen.tsx
-// Uses supercluster directly for reliable pin clustering (replaces react-native-map-clustering)
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+// Plain MapView — every issue renders as an individual pin, always visible.
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Dimensions
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator
 } from 'react-native';
 import MapView, { Marker, Callout, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { useNavigation, RouteProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import SuperCluster from 'supercluster';
-import GeoViewport from '@mapbox/geo-viewport';
 import { firestoreService } from '../services/firestoreService';
 import { Issue } from '../types';
 import { CATEGORIES } from '../constants';
@@ -28,54 +26,12 @@ type Nav = CompositeNavigationProp<
   StackNavigationProp<RootStackParamList>
 >;
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-
-// Default map center
 const DEFAULT_REGION: Region = {
   latitude: 37.3852,
   longitude: -122.1141,
   latitudeDelta: 0.05,
   longitudeDelta: 0.05,
 };
-
-// --- Clustering helpers (ported from react-native-map-clustering/helpers.js) ---
-
-function calculateBBox(region: Region): [number, number, number, number] {
-  const lngD = region.longitudeDelta < 0 ? region.longitudeDelta + 360 : region.longitudeDelta;
-  return [
-    region.longitude - lngD,
-    region.latitude - region.latitudeDelta,
-    region.longitude + lngD,
-    region.latitude + region.latitudeDelta,
-  ];
-}
-
-function getZoom(region: Region, bbox: [number, number, number, number], minZoom: number): number {
-  if (region.longitudeDelta >= 40) return minZoom;
-  const vp = GeoViewport.viewport(bbox, [SCREEN_W, SCREEN_H]);
-  return vp.zoom;
-}
-
-function clusterSize(count: number) {
-  if (count >= 50) return { outer: 84, inner: 64, font: 20 };
-  if (count >= 25) return { outer: 78, inner: 58, font: 19 };
-  if (count >= 15) return { outer: 72, inner: 54, font: 18 };
-  if (count >= 10) return { outer: 66, inner: 50, font: 17 };
-  if (count >= 8) return { outer: 60, inner: 46, font: 17 };
-  if (count >= 4) return { outer: 54, inner: 40, font: 16 };
-  return { outer: 48, inner: 36, font: 15 };
-}
-
-// --- Types ---
-
-interface PointProperties {
-  index: number;
-  issueId: string;
-}
-
-type ClusterOrPoint = SuperCluster.ClusterFeature<SuperCluster.AnyProps> | SuperCluster.PointFeature<PointProperties>;
-
-// --- Component ---
 
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
@@ -86,52 +42,6 @@ export default function MapScreen() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
-  const [displayedMarkers, setDisplayedMarkers] = useState<ClusterOrPoint[]>([]);
-
-  // Build supercluster index whenever issues change
-  // Clustering is very conservative — only kicks in when zoomed far out
-  const clusterIndex = useMemo(() => {
-    const index = new SuperCluster({
-      radius: 30,
-      maxZoom: 8,
-      minZoom: 1,
-      minPoints: 3,
-      extent: 512,
-      nodeSize: 64,
-    });
-
-    const validIssues = issues.filter(i => i.latitude != null && i.longitude != null);
-    const points: SuperCluster.PointFeature<PointProperties>[] = validIssues.map((issue, idx) => ({
-      type: 'Feature' as const,
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [issue.longitude!, issue.latitude!],
-      },
-      properties: { index: idx, issueId: issue.id },
-    }));
-
-    index.load(points);
-    return index;
-  }, [issues]);
-
-  // Filtered issues for marker lookup
-  const validIssues = useMemo(
-    () => issues.filter(i => i.latitude != null && i.longitude != null),
-    [issues]
-  );
-
-  // Recompute visible clusters whenever region or data changes
-  const updateClusters = useCallback((reg: Region) => {
-    const bbox = calculateBBox(reg);
-    const zoom = getZoom(reg, bbox, 1);
-    const clusters = clusterIndex.getClusters(bbox, zoom) as ClusterOrPoint[];
-    setDisplayedMarkers(clusters);
-  }, [clusterIndex]);
-
-  // Recompute clusters when clusterIndex changes (new data)
-  useEffect(() => {
-    updateClusters(region);
-  }, [clusterIndex]);
 
   useEffect(() => {
     const loadIssues = async () => {
@@ -166,29 +76,6 @@ export default function MapScreen() {
     }
   };
 
-  const handleRegionChange = useCallback((reg: Region) => {
-    setRegion(reg);
-    updateClusters(reg);
-  }, [updateClusters]);
-
-  const handleClusterPress = useCallback((clusterId: number) => {
-    try {
-      const leaves = clusterIndex.getLeaves(clusterId, Infinity);
-      const coords = leaves.map(l => ({
-        latitude: l.geometry.coordinates[1],
-        longitude: l.geometry.coordinates[0],
-      }));
-      if (coords.length > 0) {
-        mapRef.current?.fitToCoordinates(coords, {
-          edgePadding: { top: 50, left: 50, right: 50, bottom: 50 },
-          animated: true,
-        });
-      }
-    } catch {
-      // Cluster no longer valid — ignore
-    }
-  }, [clusterIndex]);
-
   const overlayBg = isDark ? 'rgba(15,23,42,0.9)' : 'rgba(255,255,255,0.95)';
   const overlayBgLight = isDark ? 'rgba(15,23,42,0.85)' : 'rgba(255,255,255,0.9)';
 
@@ -201,66 +88,35 @@ export default function MapScreen() {
         showsUserLocation
         showsMyLocationButton={false}
         userInterfaceStyle={isDark ? 'dark' : 'light'}
-        onRegionChangeComplete={handleRegionChange}
       >
-        {displayedMarkers.map(marker => {
-          const coords = {
-            latitude: marker.geometry.coordinates[1],
-            longitude: marker.geometry.coordinates[0],
-          };
-
-          // Cluster marker
-          if (marker.properties && 'cluster' in marker.properties && marker.properties.cluster) {
-            const count = marker.properties.point_count;
-            const id = marker.properties.cluster_id;
-            const sz = clusterSize(count);
+        {issues
+          .filter(issue => issue.latitude != null && issue.longitude != null)
+          .map(issue => {
+            const color = theme[issue.status as 'open' | 'acknowledged' | 'resolved'] || theme.open;
+            const category = CATEGORIES.find(c => c.id === issue.categoryId);
             return (
               <Marker
-                key={`cluster-${id}-${count}`}
-                coordinate={coords}
-                onPress={() => handleClusterPress(id)}
-                tracksViewChanges={false}
+                key={issue.id}
+                coordinate={{ latitude: issue.latitude!, longitude: issue.longitude! }}
+                pinColor={color}
               >
-                <View style={[styles.clusterOuter, { width: sz.outer, height: sz.outer, borderRadius: sz.outer / 2 }]}>
-                  <View style={[styles.clusterInner, { width: sz.inner, height: sz.inner, borderRadius: sz.inner / 2 }]}>
-                    <Text style={[styles.clusterText, { fontSize: sz.font }]}>{count}</Text>
+                <Callout
+                  onPress={() => navigation.navigate('IssueDetail', { issueId: issue.id })}
+                  style={styles.callout}
+                >
+                  <View style={styles.calloutInner}>
+                    <View style={styles.calloutStatusRow}>
+                      <View style={[styles.calloutDot, { backgroundColor: color }]} />
+                      <Text style={styles.calloutStatus}>{issue.status.toUpperCase()}</Text>
+                    </View>
+                    <Text style={[styles.calloutCategory, { color: theme.primary }]}>{category?.name}</Text>
+                    <Text style={styles.calloutTitle}>{issue.title}</Text>
+                    <Text style={styles.calloutCta}>Tap to view full report →</Text>
                   </View>
-                </View>
+                </Callout>
               </Marker>
             );
-          }
-
-          // Individual pin
-          const props = marker.properties as PointProperties;
-          const issue = validIssues[props.index];
-          if (!issue) return null;
-
-          const color = theme[issue.status as 'open' | 'acknowledged' | 'resolved'] || theme.open;
-          const category = CATEGORIES.find(c => c.id === issue.categoryId);
-
-          return (
-            <Marker
-              key={`pin-${issue.id}`}
-              coordinate={coords}
-              pinColor={color}
-            >
-              <Callout
-                onPress={() => navigation.navigate('IssueDetail', { issueId: issue.id })}
-                style={styles.callout}
-              >
-                <View style={styles.calloutInner}>
-                  <View style={styles.calloutStatusRow}>
-                    <View style={[styles.calloutDot, { backgroundColor: color }]} />
-                    <Text style={styles.calloutStatus}>{issue.status.toUpperCase()}</Text>
-                  </View>
-                  <Text style={[styles.calloutCategory, { color: theme.primary }]}>{category?.name}</Text>
-                  <Text style={styles.calloutTitle}>{issue.title}</Text>
-                  <Text style={styles.calloutCta}>Tap to view full report →</Text>
-                </View>
-              </Callout>
-            </Marker>
-          );
-        })}
+          })}
       </MapView>
 
       {/* Header pill */}
@@ -318,23 +174,6 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { flex: 1 },
-
-  // Cluster markers
-  clusterOuter: {
-    backgroundColor: 'rgba(245, 158, 11, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clusterInner: {
-    backgroundColor: '#f59e0b',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clusterText: {
-    color: '#ffffff',
-    fontWeight: '800',
-    textAlign: 'center',
-  },
 
   headerPill: {
     position: 'absolute', alignSelf: 'center',
