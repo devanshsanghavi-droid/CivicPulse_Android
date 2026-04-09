@@ -21,6 +21,7 @@ import { firestoreService } from "./firestoreService";
 import { storageService } from "./storage";
 import { User, UserRole } from "../types";
 import { SUPER_ADMIN_EMAILS, TEST_ACCOUNT_EMAIL } from "../constants";
+import { Platform } from "react-native";
 
 // Call this once at app startup (in App.tsx)
 export const configureGoogleSignIn = () => {
@@ -154,7 +155,7 @@ const buildUserFromFirebase = async (firebaseUser: FirebaseUser, email: string):
   });
 
   try {
-    await firestoreService.logLogin({ userId: user.id, email, name, photoURL, loginAt: now, userAgent: 'CivicPulse iOS App' });
+    await firestoreService.logLogin({ userId: user.id, email, name, photoURL, loginAt: now, userAgent: `CivicPulse ${Platform.OS === 'ios' ? 'iOS' : 'Android'} App` });
   } catch (e) { console.warn('Failed to log login event:', e); }
 
   try {

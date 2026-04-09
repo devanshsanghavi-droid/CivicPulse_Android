@@ -10,7 +10,7 @@ import {
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { firestoreService } from '../services/firestoreService';
 import { storageService } from '../services/storage';
 import { Issue, Comment } from '../types';
@@ -288,7 +288,7 @@ export default function IssueDetailScreen() {
 
             {issue.latitude != null && issue.longitude != null && (
               <View style={styles.mapSection}>
-                <MapView style={styles.mapPreview} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} pitchEnabled={false}
+                <MapView provider={PROVIDER_GOOGLE} style={styles.mapPreview} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} pitchEnabled={false}
                   initialRegion={{ latitude: issue.latitude, longitude: issue.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }}>
                   <Marker coordinate={{ latitude: issue.latitude, longitude: issue.longitude }} pinColor={sc.marker} />
                 </MapView>

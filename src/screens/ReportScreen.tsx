@@ -8,7 +8,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, MapPressEvent } from 'react-native-maps';
+import MapView, { Marker, MapPressEvent, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useApp } from '../context/AppContext';
 import { firestoreService } from '../services/firestoreService';
 import { checkRateLimit } from '../services/security';
@@ -337,6 +337,7 @@ export default function ReportScreen() {
                   {location && (
                     <View>
                       <MapView
+                        provider={PROVIDER_GOOGLE}
                         style={expandedMap === 'gps' ? styles.locMapExpanded : styles.locMapPreview}
                         userInterfaceStyle={isDark ? 'dark' : 'light'}
                         region={{ latitude: location.latitude, longitude: location.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }}
@@ -368,6 +369,7 @@ export default function ReportScreen() {
                       <Text style={[styles.resolvedAddress, { color: theme.textSecondary }]}>{addressResult.display}</Text>
                       <View>
                         <MapView
+                          provider={PROVIDER_GOOGLE}
                           style={expandedMap === 'address' ? styles.locMapExpanded : styles.locMapPreview}
                           userInterfaceStyle={isDark ? 'dark' : 'light'}
                           region={{ latitude: addressResult.lat, longitude: addressResult.lng, latitudeDelta: 0.005, longitudeDelta: 0.005 }}
@@ -390,7 +392,7 @@ export default function ReportScreen() {
               {locationTab === 'pin' && (
                 <View style={styles.field}>
                   <Text style={[styles.pinHint, { color: theme.textMuted }]}>Tap anywhere on the map to place a pin</Text>
-                  <MapView style={styles.locMapInteractive} onPress={handlePinDrop} userInterfaceStyle={isDark ? 'dark' : 'light'}
+                  <MapView provider={PROVIDER_GOOGLE} style={styles.locMapInteractive} onPress={handlePinDrop} userInterfaceStyle={isDark ? 'dark' : 'light'}
                     initialRegion={{ latitude: location?.latitude || 37.3861, longitude: location?.longitude || -122.0839, latitudeDelta: 0.01, longitudeDelta: 0.01 }}>
                     {pinLocation && <Marker coordinate={pinLocation} draggable onDragEnd={(e) => handlePinDrop(e as any)} pinColor={theme.primary} />}
                   </MapView>
