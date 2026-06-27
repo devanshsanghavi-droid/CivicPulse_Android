@@ -17,10 +17,17 @@ module.exports = ({ config }) => {
     process.env.GOOGLE_MAPS_API_KEY ||
     config.android?.config?.googleMaps?.apiKey;
 
+  // google-services.json is gitignored, so it isn't uploaded to EAS builders.
+  // On EAS it's provided as a secret *file* env var (GOOGLE_SERVICES_JSON holds
+  // the path the builder wrote it to). Locally it resolves to the repo-root file.
+  const googleServicesFile =
+    process.env.GOOGLE_SERVICES_JSON || config.android?.googleServicesFile;
+
   return {
     ...config,
     android: {
       ...config.android,
+      googleServicesFile,
       config: {
         ...config.android?.config,
         googleMaps: {
