@@ -6,11 +6,14 @@ import {
   Modal, Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { firestoreService } from '../services/firestoreService';
 import { useApp } from '../context/AppContext';
 import { Issue, Comment, UserRecord, LoginRecord, ResolutionSuggestion, IssueStatus } from '../types';
 import { CATEGORIES } from '../constants';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
+import { RootStackParamList } from '../navigation/AppNavigator';
 
 type AdminTab = 'issues' | 'users' | 'activity' | 'suggestions';
 type IssueFilter = 'all' | 'open' | 'acknowledged' | 'resolved';
@@ -28,6 +31,7 @@ const STATUS_DARK: Record<string, { bg: string; text: string }> = {
 
 export default function AdminDashboardScreen() {
   const { user, isAdmin, isDark, theme } = useApp();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const isSuperAdmin = user?.role === 'super_admin';
   const [tab, setTab] = useState<AdminTab>('issues');
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -288,6 +292,10 @@ export default function AdminDashboardScreen() {
                           <Text style={[styles.actionBtnText, { color: theme.success }]}>Resolve</Text>
                         </TouchableOpacity>
                       )}
+                      <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.primaryBorder, backgroundColor: theme.primaryLight }]} onPress={() => navigation.navigate('Insights', { issueId: issue.id })}>
+                        <Ionicons name="bar-chart-outline" size={12} color={theme.primary} />
+                        <Text style={[styles.actionBtnText, { color: theme.primary }]}>Insights</Text>
+                      </TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.error }]} onPress={() => handleDeleteIssue(issue)}>
                         <Ionicons name="trash-outline" size={12} color={theme.error} />
                         <Text style={[styles.actionBtnText, { color: theme.error }]}>Delete</Text>

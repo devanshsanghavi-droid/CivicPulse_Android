@@ -42,9 +42,12 @@ const StatusBadge = ({ status, isDark }: { status: string; isDark: boolean }) =>
   );
 };
 
+const getCity = (address?: string): string => address?.split(',')[1]?.trim() ?? '';
+
 const IssueCard = ({ issue, onPress, onAuthorPress, theme, isDark, distance }: { issue: Issue; onPress: () => void; onAuthorPress: () => void; theme: AppTheme; isDark: boolean; distance?: string }) => {
   const category = CATEGORIES.find(c => c.id === issue.categoryId);
   const photo = issue.photos?.[0]?.url;
+  const city = getCity(issue.address);
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={onPress} activeOpacity={0.85}>
@@ -84,6 +87,12 @@ const IssueCard = ({ issue, onPress, onAuthorPress, theme, isDark, distance }: {
             )}
             <Text style={[styles.authorName, { color: theme.primary }]} numberOfLines={1}>{issue.creatorName}</Text>
           </TouchableOpacity>
+          {city ? (
+            <View style={styles.cityChip}>
+              <Ionicons name="location-outline" size={10} color={theme.textMuted} />
+              <Text style={[styles.cityChipText, { color: theme.textMuted }]} numberOfLines={1}>{city}</Text>
+            </View>
+          ) : null}
           <View style={styles.upvoteRow}>
             <Ionicons name="thumbs-up" size={14} color={theme.primary} />
             <Text style={[styles.upvoteCount, { color: theme.textPrimary }]}>{issue.upvoteCount}</Text>
@@ -103,7 +112,7 @@ const formatDistance = (miles: number): string => {
 
 export default function FeedScreen() {
   const navigation = useNavigation<Nav>();
-  const { user, isDark, theme } = useApp();
+  const { user, isDark, theme, feedRefreshToken } = useApp();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [sort, setSort] = useState('trending');
   const [filterCat, setFilterCat] = useState<string | undefined>();
@@ -156,7 +165,7 @@ export default function FeedScreen() {
     } finally {
       setLoading(false);
     }
-  }, [sort, filterCat, filterStatus, search, userLocation]);
+  }, [sort, filterCat, filterStatus, search, userLocation, feedRefreshToken]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -387,6 +396,8 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.round,
   },
   distanceText: { fontSize: 10, fontWeight: '700' },
+  cityChip: { flexDirection: 'row', alignItems: 'center', gap: 3, maxWidth: 100 },
+  cityChipText: { fontSize: 11, fontWeight: '600' },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { ...TYPOGRAPHY.microLabel, letterSpacing: 2 },

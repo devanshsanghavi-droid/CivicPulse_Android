@@ -98,6 +98,59 @@ export async function checkRateLimit(action: RateLimitAction, userId: string): P
 
 // --- Input Sanitization ---
 
+// --- Profanity Filter ---
+
+// Normalize l33t-speak substitutions before checking
+function normalizeLeet(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[@]/g, 'a')
+    .replace(/[0]/g, 'o')
+    .replace(/[1]/g, 'i')
+    .replace(/[3]/g, 'e')
+    .replace(/[4]/g, 'a')
+    .replace(/[5]/g, 's')
+    .replace(/[$]/g, 's')
+    .replace(/[7]/g, 't')
+    .replace(/[!]/g, 'i')
+    .replace(/\*/g, '');  // remove asterisks used for self-censoring
+}
+
+const PROFANITY_LIST: string[] = [
+  // Strong profanity
+  'fuck', 'fucked', 'fucker', 'fuckers', 'fucking', 'fucks', 'fuckin',
+  'motherfucker', 'motherfucking', 'motherfuckers', 'mf',
+  'shit', 'shits', 'shitting', 'shitty', 'bullshit', 'dipshit', 'horseshit',
+  'cunt', 'cunts',
+  'cocksucker', 'cocksuckers',
+  'asshole', 'assholes', 'arsehole', 'arseholes',
+  'bitch', 'bitches', 'bitching', 'bitchy',
+  'whore', 'whores',
+  'slut', 'sluts',
+  // Slurs
+  'nigger', 'niggers', 'nigga', 'niggas',
+  'faggot', 'faggots',
+  'kike', 'kikes',
+  'spic', 'spics',
+  'chink', 'chinks',
+  'gook', 'gooks',
+  'wetback', 'wetbacks',
+  'retard', 'retards', 'retarded',
+];
+
+// Build a single regex from the list for fast matching
+const PROFANITY_REGEX = new RegExp(
+  `\\b(${PROFANITY_LIST.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+  'i'
+);
+
+export function checkProfanity(text: string): void {
+  if (!text || !text.trim()) return;
+  if (PROFANITY_REGEX.test(normalizeLeet(text))) {
+    throw new SecurityError('Please keep your language respectful. Your report could not be submitted.');
+  }
+}
+
 export function sanitizeText(input: string, maxLength: number): string {
   let text = input.trim();
 

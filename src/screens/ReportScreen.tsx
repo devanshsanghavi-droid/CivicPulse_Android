@@ -14,6 +14,8 @@ import { firestoreService } from '../services/firestoreService';
 import { checkRateLimit } from '../services/security';
 import { CATEGORIES } from '../constants';
 import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -22,8 +24,8 @@ type LocationTab = 'gps' | 'address' | 'pin';
 const STEP_LABELS = ['Photos', 'Details', 'Location'];
 
 export default function ReportScreen() {
-  const { user, isDark, theme, isBanned, banMessage } = useApp();
-  const navigation = useNavigation();
+  const { user, isDark, theme, isBanned, banMessage, triggerFeedRefresh } = useApp();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [currentStep, setCurrentStep] = useState(1);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -175,25 +177,71 @@ export default function ReportScreen() {
 
     setSubmitting(true);
     try {
-      const issue = await firestoreService.createIssue({
-        createdBy: user.id, creatorName: user.name, creatorPhotoURL: user.photoURL,
-        title: title.trim(), description: description.trim(), categoryId,
-        latitude: effectiveLoc.latitude, longitude: effectiveLoc.longitude,
-        address: getEffectiveAddress(), photos: [],
-      });
+      // Pre-generate the Firestore doc id so photos can be uploaded to the
+      // final `issues/{id}/` storage path BEFORE the doc is created.
+      // If photo upload fails we never write anything to Firestore, so we
+      // can never end up with an issue whose `photos` field points at a
+      // local file:// URI that disappears after the next app launch.
+      const newId = firestoreService.newIssueId();
+
+      let uploadedPhotos: { id: string; url: string }[] = [];
       if (photos.length > 0) {
-        const uploadedPhotos = await Promise.all(
-          photos.map(async (uri, i) => {
-            const url = await firestoreService.uploadPhoto(uri, issue.id);
-            return { id: `photo_${i}`, url };
-          })
-        );
-        await firestoreService.updateIssuePhotos(issue.id, uploadedPhotos);
+        try {
+          uploadedPhotos = await Promise.all(
+            photos.map(async (uri, i) => {
+              const url = await firestoreService.uploadPhoto(uri, newId);
+              // Defense in depth: reject anything that isn't an https URL.
+              if (!url || !url.startsWith('https://')) {
+                throw new Error('Upload did not return a valid download URL');
+              }
+              return { id: `photo_${i}`, url };
+            })
+          );
+        } catch (uploadErr: any) {
+          console.error('[Report] Photo upload failed:', uploadErr);
+          Alert.alert(
+            'Photo Upload Failed',
+            'We couldn\'t upload your photos, so the report was not submitted. Please check your connection and try again.'
+          );
+          return;
+        }
       }
-      Alert.alert('Report Submitted! ✅', 'Your issue has been reported.', [{ text: 'View Feed', onPress: () => navigation.goBack() }]);
+
+      const issue = await firestoreService.createIssue({
+        id: newId,
+        createdBy: user.id,
+        creatorName: user.name,
+        creatorPhotoURL: user.photoURL,
+        title: title.trim(),
+        description: description.trim(),
+        categoryId,
+        latitude: effectiveLoc.latitude,
+        longitude: effectiveLoc.longitude,
+        address: getEffectiveAddress(),
+        photos: uploadedPhotos,
+      });
+
+      // Force the Feed to refetch so the user's new report shows up at the
+      // top without needing a manual pull-to-refresh. Navigate straight to
+      // the Feed tab so they can see it appear.
+      triggerFeedRefresh();
       setTitle(''); setDescription(''); setCategoryId(''); setPhotos([]); setCurrentStep(1); setPhotoLocationNotice(false);
-    } catch (err: any) { console.error('[Report] Submission error:', err); Alert.alert('Submission Failed', err.message || 'Please try again.'); }
-    finally { setSubmitting(false); }
+      Alert.alert(
+        'Report Submitted! ✅',
+        'Your issue has been reported.',
+        [
+          {
+            text: 'View Feed',
+            onPress: () => navigation.navigate('Main', { screen: 'Feed' }),
+          },
+        ],
+      );
+    } catch (err: any) {
+      console.error('[Report] Submission error:', err);
+      Alert.alert('Submission Failed', err.message || 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const renderStepIndicator = () => (
@@ -235,9 +283,19 @@ export default function ReportScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         {renderStepIndicator()}
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          showsVerticalScrollIndicator={false}
+        >
           {currentStep === 1 && (
             <View style={styles.stepContent}>
               <Text style={[styles.stepTitle, { color: theme.textPrimary }]}>Add Photos</Text>
@@ -304,7 +362,20 @@ export default function ReportScreen() {
               </View>
               <View style={styles.field}>
                 <Text style={[styles.label, { color: theme.textMuted }]}>DESCRIPTION (OPTIONAL)</Text>
-                <TextInput style={[styles.input, styles.textArea, { backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]} placeholder="Describe the issue in detail..." placeholderTextColor={theme.textMuted} value={description} onChangeText={setDescription} multiline numberOfLines={4} textAlignVertical="top" maxLength={2000} />
+                <TextInput
+                  style={[styles.input, styles.textArea, { backgroundColor: theme.card, borderColor: theme.border, color: theme.textPrimary }]}
+                  placeholder="Describe the issue in detail..."
+                  placeholderTextColor={theme.textMuted}
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  maxLength={2000}
+                  returnKeyType="done"
+                  blurOnSubmit
+                  onSubmitEditing={() => { /* keyboard dismisses via blurOnSubmit */ }}
+                />
               </View>
             </View>
           )}
@@ -432,7 +503,8 @@ const styles = StyleSheet.create({
   bannedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xxl, gap: SPACING.md },
   bannedTitle: { ...TYPOGRAPHY.pageTitle, fontSize: 22 },
   bannedMessage: { ...TYPOGRAPHY.body, textAlign: 'center', lineHeight: 22 },
-  scroll: { padding: SPACING.lg, paddingBottom: 120 },
+  scrollContainer: { flex: 1 },
+  scroll: { padding: SPACING.lg, paddingBottom: SPACING.xl },
 
   stepIndicator: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingVertical: SPACING.lg, paddingHorizontal: SPACING.xxl, borderBottomWidth: 1 },
   stepColumn: { alignItems: 'center', width: 60 },
@@ -486,7 +558,7 @@ const styles = StyleSheet.create({
   photoLocNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: SPACING.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md, borderWidth: 1 },
   photoLocNoticeText: { flex: 1, fontSize: 13, fontWeight: '600' },
 
-  navigationButtons: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', padding: SPACING.lg, borderTopWidth: 1, gap: SPACING.sm },
+  navigationButtons: { flexDirection: 'row', padding: SPACING.lg, borderTopWidth: 1, gap: SPACING.sm },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, borderWidth: 1 },
   backBtnText: { ...TYPOGRAPHY.caption, fontWeight: '700' },
   nextBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, borderRadius: BORDER_RADIUS.lg, paddingVertical: SPACING.md },

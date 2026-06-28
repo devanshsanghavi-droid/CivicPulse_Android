@@ -224,5 +224,20 @@ export const storageService = {
     ]);
     // NOTE: We don't clear KEYS.USERS so the user record persists
     // for next sign-in. Only the session is cleared.
-  }
+  },
+
+  // --- Issue Views ---
+
+  hasViewedIssue: async (issueId: string): Promise<boolean> => {
+    try {
+      const val = await AsyncStorage.getItem(`viewed_${issueId}`);
+      return val === 'true';
+    } catch { return false; }
+  },
+
+  markIssueViewed: async (issueId: string): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(`viewed_${issueId}`, 'true');
+    } catch { /* non-critical */ }
+  },
 };

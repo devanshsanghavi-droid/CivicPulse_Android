@@ -37,7 +37,7 @@ import { calculateTrendingScore, calculateTrendingScoreWithDistance, distanceMil
 import { SUPER_ADMIN_EMAILS } from '../constants';
 import {
   checkRateLimit, checkBanned, checkDuplicate,
-  sanitizeText, validatePhotoUri, validatePhotoBlob,
+  sanitizeText, checkProfanity, validatePhotoUri, validatePhotoBlob,
   LIMITS
 } from './security';
 
@@ -134,10 +134,25 @@ export const firestoreService = {
     }
   },
 
-  createIssue: async (data: Partial<Issue>): Promise<Issue> => {
+  // Generate a client-side Firestore document ID without writing anything.
+  // Used by the report flow so photos can be uploaded to the final
+  // `issues/{id}/` storage path BEFORE the Firestore doc is created —
+  // guaranteeing the doc is never created with local file:// URIs.
+  newIssueId: (): string => doc(collection(db, 'issues')).id,
+
+  createIssue: async (data: Partial<Issue> & { id?: string }): Promise<Issue> => {
     await checkBanned(data.createdBy!);
     await checkRateLimit('createIssue', data.createdBy!);
     checkDuplicate(data.createdBy!, data.title!, data.categoryId!);
+    checkProfanity(data.title || '');
+    checkProfanity(data.description || '');
+
+    // Defense in depth: reject any photo that isn't an https download URL.
+    // Local file:// URIs must never be persisted to Firestore.
+    const safePhotos = (data.photos || []).filter(p => {
+      const url = (p as any)?.url;
+      return typeof url === 'string' && url.startsWith('https://');
+    });
 
     const newIssue = {
       createdBy: data.createdBy!,
@@ -154,8 +169,16 @@ export const firestoreService = {
       updatedAt: new Date().toISOString(),
       hidden: false,
       upvoteCount: 0,
-      photos: data.photos || []
+      photos: safePhotos,
     };
+
+    // If the caller pre-generated an id (so it could upload photos to a
+    // matching storage path), use setDoc so the path/id match. Otherwise
+    // fall back to addDoc for a server-generated id.
+    if (data.id) {
+      await setDoc(doc(db, 'issues', data.id), newIssue);
+      return { id: data.id, ...newIssue };
+    }
     const docRef = await addDoc(collection(db, 'issues'), newIssue);
     return { id: docRef.id, ...newIssue };
   },
@@ -187,7 +210,7 @@ export const firestoreService = {
     // Track the upvote record in 'upvotes' collection
     const upvoteRef = doc(db, 'upvotes', `${issueId}_${userId}`);
     if (isAdding) {
-      const upvoteData: Record<string, any> = { issueId, userId };
+      const upvoteData: Record<string, any> = { issueId, userId, createdAt: new Date().toISOString() };
       if (userName) upvoteData.userName = userName;
       if (userPhotoURL) upvoteData.userPhotoURL = userPhotoURL;
       await setDoc(upvoteRef, upvoteData);
@@ -196,13 +219,21 @@ export const firestoreService = {
     }
   },
 
-  getUpvoters: async (issueId: string): Promise<{ userId: string; userName?: string; userPhotoURL?: string }[]> => {
+  getUpvoters: async (issueId: string): Promise<{ userId: string; userName?: string; userPhotoURL?: string; createdAt?: string }[]> => {
     const q = query(collection(db, 'upvotes'), where('issueId', '==', issueId));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(d => {
       const data = d.data();
-      return { userId: data.userId, userName: data.userName, userPhotoURL: data.userPhotoURL };
+      return { userId: data.userId, userName: data.userName, userPhotoURL: data.userPhotoURL, createdAt: data.createdAt };
     });
+  },
+
+  incrementViewCount: async (issueId: string): Promise<void> => {
+    try {
+      await updateDoc(doc(db, 'issues', issueId), {
+        viewCount: increment(1)
+      });
+    } catch { /* non-critical */ }
   },
 
   deleteIssue: async (id: string, adminName: string): Promise<void> => {
@@ -211,6 +242,19 @@ export const firestoreService = {
       deletedAt: new Date().toISOString(),
       deletedByName: adminName,
       updatedAt: new Date().toISOString()
+    });
+  },
+
+  // Soft-delete an issue owned by the current user. Firestore rules allow
+  // an owner to update any non-status field on their own issue, so setting
+  // `hidden: true` here is permitted without admin privileges.
+  deleteOwnIssue: async (id: string, userName: string): Promise<void> => {
+    await updateDoc(doc(db, 'issues', id), {
+      hidden: true,
+      deletedAt: new Date().toISOString(),
+      deletedByName: userName,
+      deletedByUser: true,
+      updatedAt: new Date().toISOString(),
     });
   },
 
@@ -244,6 +288,7 @@ export const firestoreService = {
   ): Promise<Comment> => {
     await checkBanned(userId);
     await checkRateLimit('addComment', userId);
+    checkProfanity(body);
 
     const newComment = {
       issueId,
@@ -401,10 +446,30 @@ export const firestoreService = {
     const response = await fetch(localUri);
     const blob = await response.blob();
     await validatePhotoBlob(blob);
-    const filename = `issues/${issueId}/${Date.now()}.jpg`;
+
+    // React Native's fetch() often returns a blob with an empty or non-image
+    // type for local file:// URIs. Firebase Storage rules require
+    // contentType.matches('image/.*'), so we must set it explicitly.
+    // Derive the MIME type from the blob (if valid) or fall back to the
+    // URI file extension, defaulting to image/jpeg.
+    const EXT_MIME: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg',
+      png: 'image/png', heic: 'image/heic', heif: 'image/heif', webp: 'image/webp',
+    };
+    const ext = localUri.split('.').pop()?.toLowerCase() ?? '';
+    const contentType = (blob.type && blob.type.startsWith('image/'))
+      ? blob.type
+      : (EXT_MIME[ext] ?? 'image/jpeg');
+
+    const suffix = Math.random().toString(36).slice(2, 8);
+    const filename = `issues/${issueId}/${Date.now()}_${suffix}.jpg`;
     const storageRef = ref(storage, filename);
-    await uploadBytes(storageRef, blob);
+    await uploadBytes(storageRef, blob, { contentType });
     const url = await getDownloadURL(storageRef);
+    // Sanity check — must never return a local path.
+    if (!url || !url.startsWith('https://')) {
+      throw new Error('Firebase Storage returned an invalid download URL');
+    }
     return url;
   },
 

@@ -47,6 +47,7 @@ export interface Issue {
   deletedAt?: string;
   deletedByName?: string;
   upvoteCount: number;
+  viewCount?: number;
   photos: IssuePhoto[];
 }
 
@@ -95,6 +96,7 @@ export interface Upvote {
   userId: string;
   userName?: string;
   userPhotoURL?: string;
+  createdAt?: string;
 }
 
 export interface DigestSettings {

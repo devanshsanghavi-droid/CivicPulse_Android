@@ -1,32 +1,107 @@
 // src/screens/ProfileScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  Image, Switch, Alert, SafeAreaView, Linking
+  Image, Switch, Alert, SafeAreaView, Linking, ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 import { signOutUser } from '../services/firebaseAuth';
 import { storageService } from '../services/storage';
 import { firestoreService } from '../services/firestoreService';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { TYPOGRAPHY, SHADOWS, BORDER_RADIUS, SPACING } from '../styles/designSystem';
+import { CATEGORIES } from '../constants';
+import { Issue } from '../types';
 
 type Nav = StackNavigationProp<RootStackParamList>;
 
+const STATUS_COLORS_LIGHT: Record<string, { bg: string; text: string }> = {
+  open: { bg: '#fee2e2', text: '#dc2626' },
+  acknowledged: { bg: '#fef3c7', text: '#d97706' },
+  resolved: { bg: '#dcfce7', text: '#16a34a' },
+};
+const STATUS_COLORS_DARK: Record<string, { bg: string; text: string }> = {
+  open: { bg: '#7f1d1d', text: '#fca5a5' },
+  acknowledged: { bg: '#78350f', text: '#fcd34d' },
+  resolved: { bg: '#14532d', text: '#86efac' },
+};
+
 export default function ProfileScreen() {
-  const { user, setUser, isDark, toggleDarkMode, theme } = useApp();
+  const { user, setUser, isDark, toggleDarkMode, theme, triggerFeedRefresh, feedRefreshToken } = useApp();
   const navigation = useNavigation<Nav>();
   const [stats, setStats] = useState({ reportCount: 0, upvoteCount: 0 });
+  const [myIssues, setMyIssues] = useState<Issue[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      firestoreService.getUserStats(user.id).then(setStats).catch(console.error);
+  const loadProfileData = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [userStats, issues] = await Promise.all([
+        firestoreService.getUserStats(user.id),
+        firestoreService.getIssuesByUser(user.id),
+      ]);
+      setStats(userStats);
+      setMyIssues(issues);
+    } catch (err) {
+      console.error('Profile: failed to load data', err);
+    } finally {
+      setIssuesLoading(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    setIssuesLoading(true);
+    loadProfileData();
+  }, [loadProfileData, feedRefreshToken]);
+
+  // Reload when the Profile tab regains focus — picks up new reports
+  // submitted from the Report tab without waiting on the polling cycle.
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileData();
+    }, [loadProfileData])
+  );
+
+  const confirmDelete = (issue: Issue) => {
+    Alert.alert(
+      'Delete Report?',
+      `"${issue.title}" will be removed from the feed and the map. This can't be undone from the app.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => handleDelete(issue),
+        },
+      ],
+    );
+  };
+
+  const handleDelete = async (issue: Issue) => {
+    if (!user) return;
+    setDeletingId(issue.id);
+    // Optimistic removal so the row disappears instantly.
+    setMyIssues(prev => prev.filter(i => i.id !== issue.id));
+    setStats(prev => ({ ...prev, reportCount: Math.max(0, prev.reportCount - 1) }));
+    try {
+      await firestoreService.deleteOwnIssue(issue.id, user.name);
+      // Force the Feed (and any other token-listening screens) to refetch
+      // so the deleted issue disappears everywhere without a manual refresh.
+      triggerFeedRefresh();
+    } catch (err: any) {
+      console.error('Profile: delete failed', err);
+      Alert.alert('Delete Failed', err.message || 'Could not delete the report. Please try again.');
+      // Roll back the optimistic update.
+      loadProfileData();
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (!user) {
     return (
@@ -104,6 +179,72 @@ export default function ProfileScreen() {
             <Text style={[styles.statLabel, { color: theme.textMuted }]}>COLLECTIVE VOTES</Text>
           </View>
         </View>
+
+        {/* Your Reports — tap to open, trash icon to delete */}
+        <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>YOUR REPORTS</Text>
+        {issuesLoading ? (
+          <View style={[styles.reportsEmpty, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <ActivityIndicator size="small" color={theme.primary} />
+          </View>
+        ) : myIssues.length === 0 ? (
+          <View style={[styles.reportsEmpty, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Ionicons name="document-outline" size={22} color={theme.textMuted} />
+            <Text style={[styles.reportsEmptyText, { color: theme.textMuted }]}>
+              You haven&apos;t filed any reports yet
+            </Text>
+          </View>
+        ) : (
+          myIssues.map(issue => {
+            const category = CATEGORIES.find(c => c.id === issue.categoryId);
+            const statusPalette = isDark ? STATUS_COLORS_DARK : STATUS_COLORS_LIGHT;
+            const statusColors = statusPalette[issue.status] || statusPalette.open;
+            const isDeleting = deletingId === issue.id;
+            return (
+              <View
+                key={issue.id}
+                style={[styles.reportRow, { backgroundColor: theme.card, borderColor: theme.border }]}
+              >
+                <TouchableOpacity
+                  style={styles.reportRowContent}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('IssueDetail', { issueId: issue.id })}
+                  disabled={isDeleting}
+                >
+                  <View style={styles.reportTopRow}>
+                    <Text style={[styles.reportCategory, { color: theme.primary }]} numberOfLines={1}>
+                      {category?.name || 'Other'}
+                    </Text>
+                    <View style={[styles.reportStatusBadge, { backgroundColor: statusColors.bg }]}>
+                      <Text style={[styles.reportStatusText, { color: statusColors.text }]}>
+                        {issue.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.reportTitle, { color: theme.textPrimary }]} numberOfLines={2}>
+                    {issue.title || 'Untitled Report'}
+                  </Text>
+                  <Text style={[styles.reportMeta, { color: theme.textMuted }]}>
+                    {new Date(issue.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {typeof issue.upvoteCount === 'number' ? `  ·  ${issue.upvoteCount} upvote${issue.upvoteCount === 1 ? '' : 's'}` : ''}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.reportDeleteBtn, { borderColor: theme.border }]}
+                  onPress={() => confirmDelete(issue)}
+                  disabled={isDeleting}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityLabel={`Delete report: ${issue.title}`}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color={theme.error} />
+                  ) : (
+                    <Ionicons name="trash-outline" size={18} color={theme.error} />
+                  )}
+                </TouchableOpacity>
+              </View>
+            );
+          })
+        )}
 
         {/* Settings with Chevrons */}
         <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>ACCOUNT CONTROL</Text>
@@ -197,6 +338,47 @@ const styles = StyleSheet.create({
   },
   statValue: { ...TYPOGRAPHY.pageTitle, fontSize: 28, marginBottom: SPACING.xs },
   statLabel: { ...TYPOGRAPHY.microLabel, textAlign: 'center' },
+
+  // Your Reports list
+  reportsEmpty: {
+    borderRadius: BORDER_RADIUS.lg, borderWidth: 1,
+    paddingVertical: SPACING.xl, paddingHorizontal: SPACING.lg,
+    alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  reportsEmptyText: { ...TYPOGRAPHY.caption, fontWeight: '600' },
+  reportRow: {
+    flexDirection: 'row', alignItems: 'stretch',
+    borderRadius: BORDER_RADIUS.lg, borderWidth: 1,
+    marginBottom: SPACING.sm,
+    overflow: 'hidden',
+  },
+  reportRowContent: {
+    flex: 1,
+    paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md,
+    gap: 4,
+  },
+  reportTopRow: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    marginBottom: 2,
+  },
+  reportCategory: {
+    ...TYPOGRAPHY.microLabel,
+    letterSpacing: 1.2,
+    flex: 1,
+  },
+  reportStatusBadge: {
+    paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  reportStatusText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  reportTitle: { ...TYPOGRAPHY.body, fontWeight: '800', fontSize: 14 },
+  reportMeta: { ...TYPOGRAPHY.microLabel, fontWeight: '600', letterSpacing: 0.3 },
+  reportDeleteBtn: {
+    width: 48,
+    alignItems: 'center', justifyContent: 'center',
+    borderLeftWidth: 1,
+  },
 
   settingRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

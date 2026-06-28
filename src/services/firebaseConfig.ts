@@ -26,7 +26,7 @@ export const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage)
 });
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+export const storage = getStorage(app, `gs://${firebaseConfig.storageBucket}`);
 
 // NOTE: GoogleAuthProvider is NOT used in React Native.
 // Google Sign-In is handled by @react-native-google-signin/google-signin instead.

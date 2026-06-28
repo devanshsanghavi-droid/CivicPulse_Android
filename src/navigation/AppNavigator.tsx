@@ -23,6 +23,7 @@ import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import LoginScreen from '../screens/LoginScreen';
 import LocationExplanationScreen from '../screens/LocationExplanationScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
+import InsightsScreen from '../screens/InsightsScreen';
 
 // Type definitions for navigation
 export type RootStackParamList = {
@@ -31,7 +32,7 @@ export type RootStackParamList = {
   Login: undefined;
   IssueDetail: { issueId: string };
   UserProfile: { userId: string };
-  LocationExplanation: { pendingScreen: 'Map' | 'Report' };
+  Insights: { issueId: string };
 };
 
 export type MainTabParamList = {
@@ -148,17 +149,37 @@ function useUserProfileOptions() {
   };
 }
 
+function useInsightsOptions() {
+  const { theme } = useApp();
+  return {
+    headerShown: true,
+    headerTitle: 'Insights',
+    headerBackTitle: 'Back',
+    headerTintColor: theme.primary,
+    headerStyle: { backgroundColor: theme.background },
+    headerTitleStyle: { fontWeight: '800' as const, fontSize: 16, color: theme.textPrimary },
+  };
+}
+
 // Root Navigator
 export default function AppNavigator() {
-  const { user, isAuthLoading } = useApp();
+  const {
+    user,
+    isAuthLoading,
+    locationChecked,
+    hasLocationPermission,
+    locationGateDismissed,
+    markLocationGranted,
+    dismissLocationGate,
+  } = useApp();
   const issueDetailOptions = useIssueDetailOptions();
   const userProfileOptions = useUserProfileOptions();
+  const insightsOptions = useInsightsOptions();
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const prevUser = useRef<boolean>(!!user);
 
-  // When auth state changes, reset navigation to the appropriate root screen.
-  // This runs in AppNavigator (which never unmounts), so it's immune to the
-  // race condition where LoginScreen's navigate() fires on a stale ref.
+  // When auth state changes, reset navigation to Main. Guests and logged-in
+  // users both land on the Feed — Landing is no longer the default entry.
   useEffect(() => {
     if (isAuthLoading) return;
     const wasLoggedIn = prevUser.current;
@@ -171,22 +192,34 @@ export default function AppNavigator() {
 
     navigationRef.reset({
       index: 0,
-      routes: [{ name: isLoggedIn ? 'Main' : 'Landing' }],
+      routes: [{ name: 'Main' }],
     });
   }, [user, isAuthLoading]);
 
-  if (isAuthLoading) return <LoadingScreen />;
+  if (isAuthLoading || !locationChecked) return <LoadingScreen />;
+
+  // Full-screen location gate takes over before the navigator mounts.
+  // Appears on every fresh launch until the user grants location or chooses
+  // to continue without it (per-session dismiss).
+  if (!hasLocationPermission && !locationGateDismissed) {
+    return (
+      <LocationExplanationScreen
+        onGranted={markLocationGranted}
+        onSkipped={dismissLocationGate}
+      />
+    );
+  }
 
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         key={user ? 'authed' : 'guest'}
-        initialRouteName={user ? 'Main' : 'Landing'}
+        initialRouteName="Main"
         screenOptions={{ headerShown: false }}
       >
-        <Stack.Screen name="Landing" component={LandingScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen
           name="IssueDetail"
           component={IssueDetailScreen}
@@ -198,9 +231,9 @@ export default function AppNavigator() {
           options={userProfileOptions}
         />
         <Stack.Screen
-          name="LocationExplanation"
-          component={LocationExplanationScreen}
-          options={{ presentation: 'modal' }}
+          name="Insights"
+          component={InsightsScreen}
+          options={insightsOptions}
         />
       </Stack.Navigator>
     </NavigationContainer>

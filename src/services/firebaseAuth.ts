@@ -236,31 +236,47 @@ export const convertFirebaseUserToAppUser = async (
 
   // Always fetch role from Firestore (catches admin promotions/demotions)
   let firestoreRole: UserRole | null = null;
+  let hasFirestoreRecord = false;
   try {
     const { firestoreService } = require('./firestoreService');
     const userDoc = await firestoreService.getUserRecord(firebaseUser.uid);
-    if (userDoc) firestoreRole = userDoc.role;
+    if (userDoc) {
+      firestoreRole = userDoc.role;
+      hasFirestoreRecord = true;
+    }
   } catch { /* Firestore unavailable — fall back to local/defaults */ }
 
   // Check if user exists in local storage
   const existingUser = await storageService.getCurrentUser();
+  const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+  let appUser: User;
+
   if (existingUser && existingUser.email === email) {
-    // Priority: Firestore role > super admin email list > existing local role
-    const shouldBeSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
-    const role: UserRole = firestoreRole || (shouldBeSuperAdmin ? 'super_admin' : existingUser.role);
-    return await storageService.upsertUser({ ...existingUser, photoURL, name, role });
+    const role: UserRole = firestoreRole || (isSuperAdmin ? 'super_admin' : existingUser.role);
+    appUser = await storageService.upsertUser({ ...existingUser, photoURL, name, role });
+  } else {
+    const now = new Date().toISOString();
+    appUser = await storageService.upsertUser({
+      id: firebaseUser.uid, name, email,
+      role: firestoreRole || (isSuperAdmin ? 'super_admin' : 'resident') as UserRole,
+      photoURL, createdAt: now, lastLoginAt: now, notifsEnabled: true,
+    });
   }
 
-  // Otherwise create from Firebase data
-  const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
-  return await storageService.upsertUser({
-    id: firebaseUser.uid,
-    name,
-    email,
-    role: firestoreRole || (isSuperAdmin ? 'super_admin' : 'resident') as UserRole,
-    photoURL,
-    createdAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString(),
-    notifsEnabled: true,
-  });
+  // If no Firestore record exists yet (e.g. email users whose session was restored
+  // without going through signInWithEmail/signUpWithEmail), create one now so the
+  // user appears in the admin users list alongside Google-authenticated users.
+  if (!hasFirestoreRecord) {
+    try {
+      const { firestoreService } = require('./firestoreService');
+      const now = new Date().toISOString();
+      await firestoreService.upsertUserRecord({
+        id: appUser.id, email, name, photoURL,
+        role: appUser.role, banType: 'none',
+        createdAt: now, lastLoginAt: now,
+      });
+    } catch { /* non-critical — will retry on next auth state change */ }
+  }
+
+  return appUser;
 };

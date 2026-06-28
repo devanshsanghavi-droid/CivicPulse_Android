@@ -71,6 +71,14 @@ export default function IssueDetailScreen() {
         if (cancelled) return;
         setIssue(issueData);
         setComments(commentsData);
+
+        // Track unique view — increment Firestore counter once per device per issue
+        const alreadyViewed = await storageService.hasViewedIssue(issueId);
+        if (!alreadyViewed) {
+          await storageService.markIssueViewed(issueId);
+          firestoreService.incrementViewCount(issueId); // fire-and-forget
+        }
+
         if (user) {
           const [upvoted, liked] = await Promise.all([
             storageService.hasUpvoted(issueId, user.id),
@@ -80,8 +88,8 @@ export default function IssueDetailScreen() {
             setHasUpvoted(upvoted);
             setLikedComments(liked);
           }
-          // Load upvoters if current user is the creator
-          if (issueData && issueData.createdBy === user.id) {
+          // Load upvoters if current user is the creator or is admin
+          if (issueData && (issueData.createdBy === user.id || isAdmin)) {
             try {
               const voters = await firestoreService.getUpvoters(issueId);
               if (!cancelled) setUpvoters(voters);
@@ -229,6 +237,7 @@ export default function IssueDetailScreen() {
 
   const category = CATEGORIES.find(c => c.id === issue.categoryId);
   const sc = (isDark ? STATUS_DARK : STATUS_LIGHT)[issue.status] || (isDark ? STATUS_DARK : STATUS_LIGHT).open;
+  const city = issue.address?.split(',')[1]?.trim() ?? '';
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
@@ -260,6 +269,12 @@ export default function IssueDetailScreen() {
               <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
                 <Text style={[styles.statusText, { color: sc.text }]}>{issue.status.toUpperCase()}</Text>
               </View>
+              {city ? (
+                <View style={styles.cityChip}>
+                  <Ionicons name="location-outline" size={10} color={theme.textMuted} />
+                  <Text style={[styles.cityChipText, { color: theme.textMuted }]}>{city}</Text>
+                </View>
+              ) : null}
             </View>
 
             <Text style={[styles.title, { color: theme.textPrimary }]}>{issue.title}</Text>
@@ -376,6 +391,19 @@ export default function IssueDetailScreen() {
                       : `${upvoters.slice(0, 2).map(v => v.userName || 'Someone').join(', ')} and ${upvoters.length - 2} others upvoted`}
                 </Text>
               </View>
+            )}
+
+            {/* Insights button — visible to the reporter and admins */}
+            {user && (issue.createdBy === user.id || isAdmin) && (
+              <TouchableOpacity
+                style={[styles.insightsBtn, { backgroundColor: theme.primaryLight, borderColor: theme.primaryBorder }]}
+                onPress={() => navigation.navigate('Insights', { issueId: issue.id })}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="bar-chart-outline" size={16} color={theme.primary} />
+                <Text style={[styles.insightsBtnText, { color: theme.primary }]}>View Insights</Text>
+                <Ionicons name="chevron-forward" size={14} color={theme.primary} style={{ marginLeft: 'auto' }} />
+              </TouchableOpacity>
             )}
 
             <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>COMMUNITY DISCUSSION</Text>
@@ -587,6 +615,8 @@ const styles = StyleSheet.create({
   category: { ...TYPOGRAPHY.microLabel, flex: 1 },
   statusBadge: { paddingHorizontal: SPACING.sm, paddingVertical: 4, borderRadius: BORDER_RADIUS.round },
   statusText: { ...TYPOGRAPHY.microLabel, letterSpacing: 1 },
+  cityChip: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  cityChipText: { fontSize: 11, fontWeight: '600' },
 
   title: { ...TYPOGRAPHY.cardTitle, fontSize: 24, marginBottom: SPACING.md },
   description: { ...TYPOGRAPHY.body, lineHeight: 24, marginBottom: SPACING.md },
@@ -618,6 +648,18 @@ const styles = StyleSheet.create({
   upvoterImgPlaceholder: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   upvoterOverflowText: { fontSize: 9, fontWeight: '800' },
   upvotersLabel: { ...TYPOGRAPHY.caption, fontSize: 12, flex: 1 },
+  insightsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  insightsBtnText: { ...TYPOGRAPHY.body, fontSize: 14, fontWeight: '700' },
+
   sectionLabel: { ...TYPOGRAPHY.sectionLabel, marginBottom: SPACING.md },
 
   commentFooter: { borderTopWidth: 1, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },

@@ -3,6 +3,7 @@
 // Navigation is handled by AppNavigator.tsx instead of screen state strings.
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import * as Location from 'expo-location';
 import { User, Notification } from '../types';
 import { storageService } from '../services/storage';
 import { firestoreService } from '../services/firestoreService';
@@ -21,6 +22,16 @@ interface AppContextType {
   markNotifsRead: () => Promise<void>;
   locationExplained: boolean;
   setLocationExplained: (v: boolean) => void;
+  // Aggressive location gate (per-session)
+  locationChecked: boolean;
+  hasLocationPermission: boolean;
+  locationGateDismissed: boolean;
+  markLocationGranted: () => void;
+  dismissLocationGate: () => void;
+  // Bump this to force the Feed to refetch (e.g., right after a report is
+  // submitted so the new issue shows up without a manual pull-to-refresh).
+  feedRefreshToken: number;
+  triggerFeedRefresh: () => void;
   isAuthLoading: boolean;
   isBanned: boolean;
   banMessage: string;
@@ -47,6 +58,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isDark, setIsDark] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [banMessage, setBanMessage] = useState('');
+
+  // Location gate state (per-session; resets on fresh launch)
+  const [locationChecked, setLocationChecked] = useState(false);
+  const [hasLocationPermission, setHasLocationPermission] = useState(false);
+  const [locationGateDismissed, setLocationGateDismissed] = useState(false);
+
+  // Check current permission status once on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (cancelled) return;
+        setHasLocationPermission(status === 'granted');
+      } catch {
+        if (cancelled) return;
+        setHasLocationPermission(false);
+      } finally {
+        if (!cancelled) setLocationChecked(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const markLocationGranted = () => setHasLocationPermission(true);
+  const dismissLocationGate = () => setLocationGateDismissed(true);
+
+  // Feed refresh token
+  const [feedRefreshToken, setFeedRefreshToken] = useState(0);
+  const triggerFeedRefresh = () => setFeedRefreshToken(t => t + 1);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const unreadCount = notifs.filter(n => !n.read).length;
@@ -171,6 +212,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       markNotifsRead,
       locationExplained,
       setLocationExplained,
+      locationChecked,
+      hasLocationPermission,
+      locationGateDismissed,
+      markLocationGranted,
+      dismissLocationGate,
+      feedRefreshToken,
+      triggerFeedRefresh,
       isAuthLoading,
       isBanned,
       banMessage,

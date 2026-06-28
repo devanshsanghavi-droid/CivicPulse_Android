@@ -270,8 +270,14 @@ export default function LoginScreen() {
               )}
             </View>
 
-            <TouchableOpacity onPress={() => navigation.navigate('Landing')} style={styles.backBtn}>
-              <Text style={styles.backBtnText}>RETURN TO HUB</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (navigation.canGoBack()) navigation.goBack();
+                else navigation.navigate('Main', { screen: 'Feed' });
+              }}
+              style={styles.backBtn}
+            >
+              <Text style={styles.backBtnText}>BACK TO FEED</Text>
             </TouchableOpacity>
 
           </ScrollView>
@@ -346,22 +352,30 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   googleBtn: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 12,
+    shadowColor: '#ffffff',
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   googleLogo: {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
   },
   googleBtnText: {
     color: '#111827',
-    fontWeight: '600',
-    fontSize: 15,
+    fontWeight: '800',
+    fontSize: 16,
+    letterSpacing: 0.1,
   },
   btnDisabled: {
     opacity: 0.7,
